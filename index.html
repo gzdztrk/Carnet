@@ -93,6 +93,7 @@ button{cursor:pointer}
 
 /* buttons */
 .btn{border:0;border-radius:12px;padding:12px 16px;font-weight:600;background:var(--chip);color:var(--text);display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;text-decoration:none}
+.btn svg{width:20px;height:20px;flex:none}
 .btn.primary{background:var(--accent);color:var(--accent-ink)}
 .btn.ghost{background:transparent;border:1px solid var(--rule)}
 .btn.danger{background:var(--bad-bg);color:var(--bad)}
@@ -284,6 +285,25 @@ const app = $("#app");
 document.querySelectorAll(".tab").forEach(b => b.addEventListener("click", () => { UI.tab=b.dataset.tab; UI.session=null; render(); window.scrollTo(0,0); }));
 $("#fab").addEventListener("click", () => openEditor());
 document.addEventListener("click", e => { if (e.target.closest && e.target.closest("#backupBtn")) openBackup(); });
+
+/* ---------- AI games live in the Claude version ---------- */
+const CLAUDE_CARNET = "https://claude.ai/artifact/SkJpyQF39EEnoKqUSY5DPX";
+function openInClaude(game){
+  const name = game==="write" ? "À toi d'écrire" : "Mini-scène";
+  const hash = game==="write" ? "ecrire" : "scene";
+  const days = S.meta.lastBackup ? Math.floor((Date.now()-S.meta.lastBackup)/DAY) : null;
+  openSheet(`
+    <h2>${name}</h2>
+    <p style="margin:0 0 12px">This game uses AI, so it opens in the Claude version of Carnet and needs internet.</p>
+    ${navigator.onLine===false?`<div class="feedback close" style="margin-bottom:12px">You seem to be offline right now. Connect to the internet first.</div>`:""}
+    <div class="ai-box">
+      <div><b>Want to play with your newest notes?</b><br><span style="color:var(--muted);font-size:.9rem">The two versions keep separate notes. Save a backup here, then in Claude tap the label at the top right and choose that file.${days===null?"":` Last backup: ${days===0?"today":days+" day"+(days===1?"":"s")+" ago"}.`}</span></div>
+      <button class="btn ghost" id="toBackup">Save a backup first</button>
+    </div>
+    <div style="margin-top:14px"><a class="btn primary block" href="${CLAUDE_CARNET}#${hash}" target="_blank" rel="noopener">Open ${name} in Claude ↗</a></div>`, s => {
+    $("#toBackup",s).addEventListener("click", openBackup);
+  });
+}
 
 /* ---------- backup ---------- */
 function openBackup(){
@@ -492,6 +512,8 @@ function renderHub(){
     ["cloze","Texte à trous","Fill the missing words in your own sentences", false],
     ["listen","Dictée","Hear it, then type it", !TTS.ok],
     ["match","Associer","Race to pair 5 notes with their meanings", total<3],
+    ["write","À toi d'écrire","Use it in your own sentence; get a light correction", false, true],
+    ["scene","Mini-scène","An animated little scene built from your notes", false, true],
   ];
   app.innerHTML = `
     <header class="top"><div><h1>Réviser</h1><div class="sub">Pick a game, or let the mix choose for you</div></div>${syncBadge()}</header>
@@ -501,10 +523,10 @@ function renderHub(){
       <button class="btn" id="mix" ${few?"disabled":""}>${icon("mix")} Session surprise · mixed games</button>
     </section>
     ${few?`<div class="empty">Add a few notes to your carnet to unlock the games.</div>`:""}
-    <div class="modes">${modes.map(([k,t,d,off])=>`<button class="mode" data-mode="${k}" ${off||few?"disabled":""}><span class="ic">${icon(k)}</span><strong>${t}</strong><span>${d}</span></button>`).join("")}</div>`;
+    <div class="modes">${modes.map(([k,t,d,off,ai])=>`<button class="mode" data-mode="${k}" ${off||(few&&!ai)?"disabled":""}><span class="ic">${icon(k)}</span><strong>${t}${ai?'<span class="ai">AI ↗</span>':""}</strong><span>${d}</span></button>`).join("")}</div>`;
   $("#mix").addEventListener("click", () => startSession("mix"));
   app.querySelectorAll("[data-mode]").forEach(b => b.addEventListener("click", () => {
-    const m=b.dataset.mode; if(m==="match") startMatch(); else startSession(m);
+    const m=b.dataset.mode; if(m==="match") startMatch(); else if(m==="write"||m==="scene") openInClaude(m); else startSession(m);
   }));
 }
 
