@@ -523,7 +523,8 @@ function renderHub(){
       <button class="btn" id="mix" ${few?"disabled":""}>${icon("mix")} Session surprise · mixed games</button>
     </section>
     ${few?`<div class="empty">Add a few notes to your carnet to unlock the games.</div>`:""}
-    <div class="modes">${modes.map(([k,t,d,off,ai])=>`<button class="mode" data-mode="${k}" ${off||(few&&!ai)?"disabled":""}><span class="ic">${icon(k)}</span><strong>${t}${ai?'<span class="ai">AI ↗</span>':""}</strong><span>${d}</span></button>`).join("")}</div>`;
+    <div class="modes">${modes.map(([k,t,d,off,ai])=>`<button class="mode" data-mode="${k}" ${off||(few&&!ai)?"disabled":""}><span class="ic">${icon(k)}</span><strong>${t}${ai?'<span class="ai">AI ↗</span>':""}</strong><span>${d}</span></button>`).join("")}</div>
+    <p style="text-align:center;color:var(--muted);font-size:.75rem;margin-top:22px">Version 3</p>`;
   $("#mix").addEventListener("click", () => startSession("mix"));
   app.querySelectorAll("[data-mode]").forEach(b => b.addEventListener("click", () => {
     const m=b.dataset.mode; if(m==="match") startMatch(); else if(m==="write"||m==="scene") openInClaude(m); else startSession(m);
@@ -687,7 +688,16 @@ function startMatch(){
 }
 
 render();
-if ("serviceWorker" in navigator) { window.addEventListener("load", () => { navigator.serviceWorker.register("./sw.js").catch(()=>{}); }); }
+const APP_VERSION = 3;
+if ("serviceWorker" in navigator) {
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadController && !reloaded) { reloaded = true; location.reload(); } });
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js", { updateViaCache: "none" }).then(reg => { try { reg.update(); } catch {} }).catch(()=>{});
+  });
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") navigator.serviceWorker.getRegistration().then(r => r && r.update()).catch(()=>{}); });
+}
 })();
 </script>
 </body>

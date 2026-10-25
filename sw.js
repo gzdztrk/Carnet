@@ -1,10 +1,10 @@
 // Mon Carnet de Français: keeps the app working offline.
 // Change VERSION whenever you upload a new index.html, so phones pick up the update.
-const VERSION = "carnet-v2";
+const VERSION = "carnet-v3";
 const APP_FILES = ["./", "./index.html", "./manifest.webmanifest", "./apple-touch-icon.png", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(VERSION).then((c) => c.addAll(APP_FILES)).then(() => self.skipWaiting()));
+  event.waitUntil(caches.open(VERSION).then((c) => c.addAll(APP_FILES.map((u) => new Request(u, { cache: "reload" })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener("activate", (event) => {
@@ -36,7 +36,7 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(
     caches.open(VERSION).then((c) =>
       c.match(req, { ignoreSearch: true }).then((hit) => {
-        const fresh = fetch(req).then((res) => { if (res.ok) c.put(req, res.clone()); return res; }).catch(() => null);
+        const fresh = fetch(req.url, { cache: "no-cache", credentials: "same-origin" }).then((res) => { if (res.ok) c.put(req, res.clone()); return res; }).catch(() => null);
         if (hit) { event.waitUntil(fresh); return hit; }
         return fresh.then((res) => res || (req.mode === "navigate" ? c.match("./index.html") : Response.error()));
       })
