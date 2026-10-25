@@ -1,0 +1,672 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Mon Carnet de Français</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Carnet">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#F6F7FB" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0E1222" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Young+Serif&family=Figtree:wght@400;500;600;700&family=Kalam:wght@400;700&display=swap">
+<style>
+*,*::before,*::after{box-sizing:border-box}
+:root{padding-top:env(safe-area-inset-top,0px);color-scheme:light}
+body{margin:0}
+[hidden]{display:none!important}
+img{max-width:100%}
+.vh{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+/* Layout: a French school "cahier" — Seyès-ruled paper, red margin line, ink-blue writing; one column, bottom tab bar like an iPhone app */
+:root{
+  --paper:#F6F7FB; --sheet:#FFFFFF; --ink:#1F2F7A; --text:#1B1F2E; --muted:#5E6582;
+  --rule:#C9D3EE; --rule-faint:#E4E9F7; --margin:#D9505C; --accent:#2B44B8; --accent-ink:#FFFFFF;
+  --good:#1F8A5B; --good-bg:#E3F4EC; --bad:#C2413F; --bad-bg:#FBE7E6; --warn:#A26A00; --warn-bg:#FFF2D6;
+  --chip:#ECEFF9; --shadow:0 1px 2px rgba(20,30,80,.06),0 6px 20px rgba(20,30,80,.07);
+  --f-display:"Young Serif",Georgia,"Times New Roman",serif;
+  --f-body:"Figtree",-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-hand:"Kalam","Comic Sans MS","Segoe Print",cursive;
+  --r:14px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#0E1222; --sheet:#161B30; --ink:#AFC0FF; --text:#E7EAF5; --muted:#9AA2C2;
+  --rule:#2A3354; --rule-faint:#1E2541; --margin:#E2737C; --accent:#8EA2FF; --accent-ink:#0E1222;
+  --good:#5ED39C; --good-bg:#12302A; --bad:#FF8C86; --bad-bg:#3A1A1E; --warn:#F2C162; --warn-bg:#36290D;
+  --chip:#222A47; --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.25); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#0E1222; --sheet:#161B30; --ink:#AFC0FF; --text:#E7EAF5; --muted:#9AA2C2;
+  --rule:#2A3354; --rule-faint:#1E2541; --margin:#E2737C; --accent:#8EA2FF; --accent-ink:#0E1222;
+  --good:#5ED39C; --good-bg:#12302A; --bad:#FF8C86; --bad-bg:#3A1A1E; --warn:#F2C162; --warn-bg:#36290D;
+  --chip:#222A47; --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.25); color-scheme:dark}
+
+html,body{height:100%}
+body{background:var(--paper);color:var(--text);font-family:var(--f-body);font-size:16px;line-height:1.45;-webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--paper)}
+button,input,textarea,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+.wrap{max-width:640px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:12px calc(96px + env(safe-area-inset-bottom,0px))}
+
+/* header */
+.top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding-block:10px 14px}
+.top h1{font-family:var(--f-display);font-weight:400;font-size:1.9rem;line-height:1.1;color:var(--ink);margin:0;text-wrap:balance}
+.top .sub{color:var(--muted);font-size:.85rem;margin-top:4px}
+.sync{font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:6px;white-space:nowrap}
+.sync i{width:7px;height:7px;border-radius:50%;background:var(--muted);display:inline-block}
+.sync.ok i{background:var(--good)} .sync.local i{background:var(--warn)}
+
+/* search + chips */
+.search{display:flex;align-items:center;gap:8px;background:var(--sheet);border:1px solid var(--rule);border-radius:12px;padding:0 12px;height:44px}
+.search input{flex:1;border:0;background:transparent;outline:none;min-width:0;height:100%}
+.chips{display:flex;gap:8px;overflow-x:auto;padding-block:12px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;border:1px solid transparent;background:var(--chip);border-radius:999px;padding:6px 14px;font-size:.88rem;font-weight:500;color:var(--text)}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--sheet)}
+.chip .n{opacity:.6;margin-left:4px;font-variant-numeric:tabular-nums}
+
+/* note cards — Seyès ruled */
+.list{display:flex;flex-direction:column;gap:12px}
+.note{position:relative;text-align:left;border:1px solid var(--rule);border-radius:var(--r);padding:14px 14px 14px 30px;width:100%;
+  background:
+    linear-gradient(to right,transparent 18px,var(--margin) 18px,var(--margin) 19.5px,transparent 19.5px),
+    repeating-linear-gradient(to bottom,transparent 0,transparent 23px,var(--rule-faint) 23px,var(--rule-faint) 24px),
+    var(--sheet);
+  box-shadow:var(--shadow);display:flex;flex-direction:column;gap:4px}
+.note .row{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.note .fr{font-family:var(--f-display);font-size:1.18rem;color:var(--ink);min-width:0;overflow-wrap:anywhere}
+.note .mean{color:var(--muted);font-size:.95rem;min-width:0;overflow-wrap:anywhere}
+.note .ex{font-family:var(--f-hand);font-size:1.02rem;color:var(--text);opacity:.85;overflow-wrap:anywhere}
+.kind{flex:none;font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;font-weight:700;padding:3px 7px;border-radius:6px;background:var(--chip);color:var(--muted)}
+.kind.expression{color:var(--accent)} .kind.phrase{color:var(--margin)}
+.boxdots{display:flex;gap:3px;margin-top:4px}
+.boxdots b{width:14px;height:4px;border-radius:2px;background:var(--rule)}
+.boxdots b.on{background:var(--good)}
+.tag-ex{font-size:.7rem;color:var(--warn);background:var(--warn-bg);padding:1px 6px;border-radius:5px;margin-left:6px;vertical-align:middle}
+
+.empty{text-align:center;padding:40px 16px;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:12px}
+.empty h2{font-family:var(--f-display);font-weight:400;color:var(--ink);margin:0;font-size:1.4rem}
+
+/* buttons */
+.btn{border:0;border-radius:12px;padding:12px 16px;font-weight:600;background:var(--chip);color:var(--text);display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;text-decoration:none}
+.btn.primary{background:var(--accent);color:var(--accent-ink)}
+.btn.ghost{background:transparent;border:1px solid var(--rule)}
+.btn.danger{background:var(--bad-bg);color:var(--bad)}
+.btn.good{background:var(--good-bg);color:var(--good)}
+.btn:disabled{opacity:.5;cursor:default}
+.btn.block{width:100%}
+.btnrow{display:flex;gap:10px;flex-wrap:wrap}
+.btnrow>.btn{flex:1 1 140px}
+
+/* tab bar */
+.tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;background:color-mix(in srgb,var(--sheet) 92%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--rule);
+  padding:6px max(16px,env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));display:flex;justify-content:center}
+.tabs .in{display:flex;align-items:center;justify-content:space-around;width:100%;max-width:640px}
+.tab{background:none;border:0;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:.72rem;font-weight:600;color:var(--muted);padding:6px 14px;min-width:72px}
+.tab svg{width:24px;height:24px}
+.tab[aria-current="page"]{color:var(--accent)}
+.fab{width:54px;height:54px;border-radius:50%;background:var(--accent);color:var(--accent-ink);border:0;display:grid;place-items:center;box-shadow:var(--shadow);margin-top:-22px}
+.fab svg{width:26px;height:26px}
+
+/* sheet (modal) */
+.scrim{position:fixed;inset:0;background:rgba(10,14,35,.45);z-index:40;display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:var(--paper);width:100%;max-width:640px;max-height:92%;overflow:auto;border-radius:20px 20px 0 0;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:10px calc(20px + env(safe-area-inset-bottom,0px));animation:up .22s ease-out}
+@keyframes up{from{transform:translateY(30px);opacity:.4}to{transform:none;opacity:1}}
+.grab{width:40px;height:5px;border-radius:3px;background:var(--rule);margin:0 auto 10px}
+.sheet h2{font-family:var(--f-display);font-weight:400;color:var(--ink);margin:4px 0 14px;font-size:1.45rem}
+.field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.field label{font-size:.78rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.field input,.field textarea{background:var(--sheet);border:1px solid var(--rule);border-radius:12px;padding:11px 12px;outline:none;width:100%}
+.field input:focus,.field textarea:focus{border-color:var(--accent)}
+.field textarea{min-height:72px;resize:vertical}
+.field .hint{font-size:.8rem;color:var(--muted)}
+.seg{display:flex;background:var(--chip);border-radius:12px;padding:3px;gap:3px}
+.seg button{flex:1;border:0;background:transparent;border-radius:9px;padding:9px 6px;font-weight:600;font-size:.9rem;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--sheet);color:var(--ink);box-shadow:var(--shadow)}
+
+.detail-fr{font-family:var(--f-display);font-size:1.8rem;line-height:1.2;color:var(--ink);overflow-wrap:anywhere}
+.detail-mean{font-size:1.05rem;color:var(--muted);margin-top:4px}
+.detail-ex{font-family:var(--f-hand);font-size:1.2rem;margin-top:14px;padding:10px 12px 10px 18px;border-left:2px solid var(--margin);background:var(--sheet);border-radius:0 10px 10px 0}
+.meta-line{font-size:.82rem;color:var(--muted);margin-top:8px}
+.section-label{font-size:.75rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:22px 0 10px}
+.vids{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.vid{display:flex;flex-direction:column;gap:2px;padding:12px;border-radius:12px;background:var(--sheet);border:1px solid var(--rule);text-decoration:none;color:var(--text)}
+.vid strong{color:var(--ink);display:flex;align-items:center;gap:6px}
+.vid span{font-size:.8rem;color:var(--muted)}
+.ai-box{background:var(--sheet);border:1px solid var(--rule);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.ai-ex .fr{font-family:var(--f-hand);font-size:1.1rem}
+.ai-ex .en{font-size:.86rem;color:var(--muted)}
+.pill{display:inline-block;font-size:.72rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:6px;background:var(--chip);color:var(--ink)}
+.confirm{background:var(--bad-bg);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:10px;color:var(--bad)}
+
+/* review hub */
+.today{border-radius:var(--r);padding:18px;background:var(--ink);color:var(--sheet);display:flex;flex-direction:column;gap:12px;box-shadow:var(--shadow)}
+.today .big{font-family:var(--f-display);font-size:2.4rem;line-height:1;font-variant-numeric:tabular-nums}
+.today .lab{opacity:.8;font-size:.9rem}
+.today .stats{display:flex;gap:18px;font-size:.85rem;opacity:.9}
+.today .btn{background:var(--sheet);color:var(--ink)}
+.modes{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px}
+.mode{border:1px solid var(--rule);background:var(--sheet);border-radius:var(--r);padding:14px;text-align:left;display:flex;flex-direction:column;gap:6px;min-height:118px;box-shadow:var(--shadow)}
+.mode .ic{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:var(--chip);color:var(--ink)}
+.mode .ic svg{width:20px;height:20px}
+.mode strong{font-size:1rem;color:var(--text)}
+.mode span{font-size:.82rem;color:var(--muted)}
+.mode .ai{font-size:.62rem;font-weight:700;letter-spacing:.08em;color:var(--accent);margin-left:6px;vertical-align:middle}
+.mode:disabled{opacity:.45}
+
+/* session */
+.sess-top{display:flex;align-items:center;gap:12px;padding-block:8px 16px}
+.x{width:40px;height:40px;border-radius:50%;border:0;background:var(--chip);display:grid;place-items:center;flex:none}
+.bar{flex:1;height:8px;border-radius:4px;background:var(--rule-faint);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--good);transition:width .3s}
+.count{font-size:.85rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.card{border:1px solid var(--rule);border-radius:18px;min-height:260px;padding:22px 20px 22px 36px;position:relative;
+  background:
+    linear-gradient(to right,transparent 22px,var(--margin) 22px,var(--margin) 23.5px,transparent 23.5px),
+    repeating-linear-gradient(to bottom,transparent 0,transparent 31px,var(--rule-faint) 31px,var(--rule-faint) 32px),
+    var(--sheet);
+  box-shadow:var(--shadow);display:flex;flex-direction:column;gap:14px}
+.card .q-label{font-size:.75rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.card .q-big{font-family:var(--f-display);font-size:1.7rem;line-height:1.25;color:var(--ink);overflow-wrap:anywhere}
+.card .q-hand{font-family:var(--f-hand);font-size:1.3rem;line-height:1.5;overflow-wrap:anywhere}
+.gap{display:inline-block;min-width:80px;border-bottom:2px dashed var(--accent);color:transparent}
+.answer-in{background:var(--paper);border:1px solid var(--rule);border-radius:12px;padding:12px;width:100%;font-size:1.1rem;outline:none}
+.answer-in:focus{border-color:var(--accent)}
+.feedback{border-radius:12px;padding:12px 14px;font-size:.95rem}
+.feedback.ok{background:var(--good-bg);color:var(--good)}
+.feedback.no{background:var(--bad-bg);color:var(--bad)}
+.feedback.close{background:var(--warn-bg);color:var(--warn)}
+.feedback b{font-weight:700}
+.reveal{border-top:1px dashed var(--rule);padding-top:12px;display:flex;flex-direction:column;gap:6px}
+.speak{width:84px;height:84px;border-radius:50%;border:0;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;align-self:center}
+.speak svg{width:36px;height:36px}
+.done{text-align:center;display:flex;flex-direction:column;align-items:center;gap:12px;padding-block:30px}
+.done .score{font-family:var(--f-display);font-size:3.2rem;color:var(--ink);font-variant-numeric:tabular-nums}
+
+/* match game */
+.match{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tile{border:1px solid var(--rule);background:var(--sheet);border-radius:12px;padding:12px 10px;min-height:64px;font-size:.95rem;text-align:center;overflow-wrap:anywhere;transition:transform .15s,opacity .3s}
+.tile.fr{font-family:var(--f-display);color:var(--ink)}
+.tile.sel{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset}
+.tile.gone{opacity:0;pointer-events:none;transform:scale(.92)}
+.tile.shake{animation:shake .35s}
+@keyframes shake{25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+
+/* scene */
+.line{display:flex;gap:10px;align-items:flex-start}
+.line .who{flex:none;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:.8rem;background:var(--chip);color:var(--ink)}
+.line .say{background:var(--sheet);border:1px solid var(--rule);border-radius:4px 14px 14px 14px;padding:9px 12px;min-width:0;overflow-wrap:anywhere}
+.line.b .who{background:var(--bad-bg);color:var(--margin)}
+mark{background:color-mix(in srgb,var(--accent) 18%,transparent);color:inherit;border-radius:4px;padding:0 2px;font-weight:600}
+.opt{display:block;width:100%;text-align:left;border:1px solid var(--rule);background:var(--sheet);border-radius:12px;padding:11px 12px;margin-top:8px}
+.opt.right{background:var(--good-bg);border-color:var(--good);color:var(--good)}
+.opt.wrong{background:var(--bad-bg);border-color:var(--bad);color:var(--bad)}
+.spinner{width:22px;height:22px;border-radius:50%;border:3px solid var(--rule);border-top-color:var(--accent);animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading{display:flex;align-items:center;gap:10px;color:var(--muted);padding:14px 0}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(90px + env(safe-area-inset-bottom,0px));background:var(--text);color:var(--paper);padding:10px 16px;border-radius:999px;font-size:.9rem;z-index:60;box-shadow:var(--shadow);max-width:90%}
+.notice{font-size:.85rem;background:var(--warn-bg);color:var(--warn);border-radius:12px;padding:10px 12px;margin-bottom:12px}
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+@media (max-width:380px){.modes,.vids{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<div class="wrap" id="app"></div>
+<nav class="tabs" aria-label="Sections"><div class="in">
+  <button class="tab" data-tab="carnet" aria-current="page">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3V4z"/><path d="M5 17a3 3 0 0 1 3-3h11"/><path d="M9 8h6"/></svg>Carnet</button>
+  <button class="fab" id="fab" aria-label="Add a note">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+  <button class="tab" data-tab="reviser">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0 1 14-5.3L20 9"/><path d="M20 4v5h-5"/><path d="M20 12a8 8 0 0 1-14 5.3L4 15"/><path d="M4 20v-5h5"/></svg>Réviser</button>
+</div></nav>
+
+<script>
+(() => {
+"use strict";
+/* ---------- helpers ---------- */
+const $ = (s, r=document) => r.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const DAY = 86400000;
+const INTERVALS = [0, 1, 3, 7, 16, 35]; // days per box (Leitner)
+const todayKey = () => { const d=new Date(); return d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate(); };
+const shuffle = a => { a=a.slice(); for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a; };
+const uid = () => "n" + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+const norm = s => String(s||"").toLowerCase().replace(/[’`´]/g,"'").replace(/[.,!?;:«»"()\-–—]/g," ").replace(/\s+/g," ").trim();
+const loose = s => norm(s).normalize("NFD").replace(/[̀-ͯ]/g,"");
+const KIND_LABEL = { mot:"Mot", expression:"Expression", phrase:"Phrase" };
+
+function toast(msg){ const t=document.createElement("div"); t.className="toast"; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(), 2200); }
+
+/* ---------- text to speech ---------- */
+const TTS = { ok: "speechSynthesis" in window, voice:null };
+function pickVoice(){ try{ const vs=speechSynthesis.getVoices(); TTS.voice = vs.find(v=>/^fr(-|_)FR/i.test(v.lang)) || vs.find(v=>/^fr/i.test(v.lang)) || null; }catch{} }
+if (TTS.ok){ pickVoice(); try{ speechSynthesis.onvoiceschanged = pickVoice; }catch{} }
+function speak(text, rate=0.92){ if(!TTS.ok) return; try{ speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(text.replace(/[\[\]]/g,"")); u.lang="fr-FR"; u.rate=rate; if(TTS.voice) u.voice=TTS.voice; speechSynthesis.speak(u);}catch{} }
+
+/* ---------- store: this phone only (localStorage) ---------- */
+const S = {
+  notes: lsGet("carnet.notes", []),
+  meta: lsGet("carnet.meta", { streak:0, lastDay:"", reviews:0, lastBackup:0 }),
+  ai: null,
+};
+let storageOK = true;
+function cache(){ try{ localStorage.setItem("carnet.notes", JSON.stringify(S.notes)); localStorage.setItem("carnet.meta", JSON.stringify(S.meta)); storageOK=true; }catch{ storageOK=false; toast("Couldn't save. Your phone storage may be full."); } }
+function saveNote(n){ const i=S.notes.findIndex(x=>x.id===n.id); if(i<0) S.notes.unshift(n); else S.notes[i]=n; cache(); render(); }
+function deleteNote(id){ S.notes=S.notes.filter(n=>n.id!==id); cache(); render(); }
+function saveMeta(){ cache(); }
+if (navigator.storage && navigator.storage.persist) { try{ navigator.storage.persist(); }catch{} }
+/* ---------- spaced repetition ---------- */
+const isDue = n => (n.due||0) <= Date.now();
+function grade(n, correct){
+  const box = correct ? Math.min((n.box||0)+1, 5) : 0;
+  const due = correct ? Date.now() + INTERVALS[box]*DAY - 3600000 : Date.now();
+  saveNote({ ...n, box, due, seen:(n.seen||0)+1, right:(n.right||0)+(correct?1:0) });
+  const t=todayKey();
+  if (S.meta.lastDay !== t){
+    const y=new Date(Date.now()-DAY); const yk=y.getFullYear()+"-"+(y.getMonth()+1)+"-"+y.getDate();
+    S.meta.streak = S.meta.lastDay===yk ? (S.meta.streak||0)+1 : 1; S.meta.lastDay=t;
+  }
+  S.meta.reviews=(S.meta.reviews||0)+1; saveMeta();
+}
+
+/* ---------- state + routing ---------- */
+const UI = { tab:"carnet", filter:"all", q:"", session:null };
+const app = $("#app");
+document.querySelectorAll(".tab").forEach(b => b.addEventListener("click", () => { UI.tab=b.dataset.tab; UI.session=null; render(); window.scrollTo(0,0); }));
+$("#fab").addEventListener("click", () => openEditor());
+document.addEventListener("click", e => { if (e.target.closest && e.target.closest("#backupBtn")) openBackup(); });
+
+/* ---------- backup ---------- */
+function openBackup(){
+  const last = S.meta.lastBackup ? new Date(S.meta.lastBackup).toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"}) : "never";
+  openSheet(`
+    <h2>Sauvegarde</h2>
+    <p style="margin:0 0 10px">Your notes are stored only on this phone. Save a backup file now and then (in Files or iCloud Drive), so you can get them back if you change phones or remove the app.</p>
+    <div class="meta-line">${S.notes.length} note${S.notes.length===1?"":"s"} · Last backup: ${last}</div>
+    <div class="btnrow" style="margin-top:16px"><button class="btn primary" id="exp">Save a backup</button><button class="btn ghost" id="imp">Restore from a file</button></div>
+    <input type="file" id="impFile" class="vh" accept=".json,application/json,text/plain" tabindex="-1" aria-hidden="true">
+    <div id="bkMsg" style="margin-top:14px"></div>`, s => {
+    const msg = (cls, t) => { $("#bkMsg",s).innerHTML = `<div class="feedback ${cls}">${esc(t)}</div>`; };
+    $("#exp",s).addEventListener("click", async () => {
+      const d=new Date(), stamp=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+      const json = JSON.stringify({ app:"mon-carnet", version:1, exported:d.toISOString(), notes:S.notes, meta:S.meta }, null, 1);
+      const name = "carnet-backup-"+stamp+".json";
+      const done = () => { S.meta.lastBackup=Date.now(); saveMeta(); msg("ok", "Backup ready: "+name+". Keep it in Files or iCloud Drive."); render(); };
+      try{
+        const file = new File([json], name, { type:"application/json" });
+        if (navigator.canShare && navigator.canShare({ files:[file] })){ await navigator.share({ files:[file], title:"Carnet backup" }); return done(); }
+      }catch(e){ if (e && e.name==="AbortError") return; }
+      try{
+        const url = URL.createObjectURL(new Blob([json], { type:"application/json" }));
+        const a = document.createElement("a"); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(()=>URL.revokeObjectURL(url), 4000); done();
+      }catch{ msg("no", "Couldn't create the backup file. Try again."); }
+    });
+    $("#imp",s).addEventListener("click", () => $("#impFile",s).click());
+    $("#impFile",s).addEventListener("change", async e => {
+      const f=e.target.files && e.target.files[0]; if(!f) return;
+      try{
+        const data = JSON.parse(await f.text());
+        const list = Array.isArray(data) ? data : data.notes;
+        if (!Array.isArray(list)) throw 0;
+        let added=0, updated=0;
+        list.forEach(n => { if(!n || !n.french) return; n.id = n.id || uid(); const i=S.notes.findIndex(x=>x.id===n.id); if(i<0){ S.notes.push(n); added++; } else { S.notes[i]=n; updated++; } });
+        S.notes.sort((a,b)=>(b.created||0)-(a.created||0));
+        cache(); render();
+        msg("ok", `Restored: ${added} new note${added===1?"":"s"}${updated?`, ${updated} updated`:""}.`);
+      }catch{ msg("no", "That file isn't a Carnet backup. Choose a file named carnet-backup-….json."); }
+      e.target.value="";
+    });
+  });
+}
+
+function render(){
+  document.querySelectorAll(".tab").forEach(b => b.dataset.tab===UI.tab && !UI.session ? b.setAttribute("aria-current","page") : b.removeAttribute("aria-current"));
+  $(".tabs").hidden = !!UI.session;
+  if (UI.session) return; // session renders itself
+  UI.tab==="carnet" ? renderCarnet() : renderHub();
+}
+function syncBadge(){
+  const days = S.meta.lastBackup ? Math.floor((Date.now()-S.meta.lastBackup)/DAY) : null;
+  const warn = S.notes.length>=5 && (days===null || days>=14);
+  return `<button class="sync ${warn?"local":"ok"}" id="backupBtn" style="background:none;border:0;padding:6px 0"><i></i>${warn?"Back up your notes":"Sauvegarde"}</button>`;
+}
+/* ---------- Carnet view ---------- */
+function renderCarnet(){
+  const counts = { all:S.notes.length, mot:0, expression:0, phrase:0 };
+  S.notes.forEach(n => counts[n.kind] = (counts[n.kind]||0)+1);
+  const q = loose(UI.q);
+  const list = S.notes.filter(n => (UI.filter==="all"||n.kind===UI.filter) && (!q || loose([n.french,n.meaning,n.example,n.source].join(" ")).includes(q)));
+  const hadFocus = document.activeElement && document.activeElement.id==="q";
+  app.innerHTML = `
+    <header class="top"><div><h1>Mon carnet</h1><div class="sub">${S.notes.length} note${S.notes.length===1?"":"s"} · ${S.notes.filter(isDue).length} à revoir</div></div>${syncBadge()}</header>
+    <label class="search"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="q" type="search" placeholder="Chercher un mot, une série…" value="${esc(UI.q)}" aria-label="Search notes"></label>
+    <div class="chips" role="group" aria-label="Filter">
+      ${[["all","Tout"],["mot","Mots"],["expression","Expressions"],["phrase","Phrases"]].map(([k,l])=>`<button class="chip" data-f="${k}" aria-pressed="${UI.filter===k}">${l}<span class="n">${counts[k]||0}</span></button>`).join("")}
+    </div>
+    <div class="list">${list.map(noteCard).join("") || emptyState()}</div>`;
+  const qi=$("#q"); qi.addEventListener("input", e => { UI.q=e.target.value; renderCarnet(); });
+  if (hadFocus){ qi.focus(); qi.setSelectionRange(qi.value.length, qi.value.length); }
+  app.querySelectorAll("[data-f]").forEach(b => b.addEventListener("click", () => { UI.filter=b.dataset.f; renderCarnet(); }));
+  app.querySelectorAll("[data-open]").forEach(b => b.addEventListener("click", () => openDetail(b.dataset.open)));
+  const ex=$("#addExamples"); if(ex) ex.addEventListener("click", addExamples);
+  const nw=$("#addFirst"); if(nw) nw.addEventListener("click", () => openEditor());
+}
+function noteCard(n){
+  const box=n.box||0;
+  return `<button class="note" data-open="${n.id}">
+    <div class="row"><span class="fr">${esc(n.french)}${n.example_seed?`<span class="tag-ex">exemple</span>`:""}</span><span class="kind ${n.kind}">${KIND_LABEL[n.kind]||"Mot"}</span></div>
+    ${n.meaning?`<div class="mean">${esc(n.meaning)}</div>`:""}
+    ${n.example?`<div class="ex">${esc(n.example.replace(/[\[\]]/g,""))}</div>`:""}
+    <div class="boxdots" aria-label="Memory level ${box} of 5">${[1,2,3,4,5].map(i=>`<b class="${i<=box?"on":""}"></b>`).join("")}</div>
+  </button>`;
+}
+function emptyState(){
+  if (S.notes.length) return `<div class="empty">Nothing matches that search.</div>`;
+  return `<div class="empty"><h2>Ton carnet est vide</h2>
+    <div>Add the words, expressions and sentences you meet while studying or watching a series.</div>
+    <div class="btnrow" style="width:100%;max-width:360px"><button class="btn primary" id="addFirst">Add a note</button><button class="btn ghost" id="addExamples">Add 6 example notes</button></div></div>`;
+}
+function addExamples(){
+  const base = Date.now();
+  const ex = [
+    ["expression","d'autant plus que","all the more so since","Je préfère le train, d'autant plus que c'est moins cher.","TCF writing"],
+    ["expression","avoir du mal à","to have trouble (doing)","J'[ai du mal à] comprendre les gens quand ils parlent vite.",""],
+    ["expression","ça vaut le coup","it's worth it","Le musée est loin, mais ça vaut le coup.",""],
+    ["phrase","Je n'en reviens pas !","I can't believe it!","","Lupin, saison 1"],
+    ["expression","poser un lapin","to stand someone up","Il m'a [posé un lapin] hier soir.","Dix pour cent"],
+    ["mot","un défi","a challenge","Apprendre le français est un vrai défi.",""],
+  ];
+  ex.forEach(([kind,french,meaning,example,source],i) => saveNote({ id:uid(), kind, french, meaning, example, source, created:base-i, box:0, due:0, example_seed:true }));
+  toast("Example notes added");
+}
+
+/* ---------- sheets ---------- */
+function openSheet(html, onMount){
+  closeSheet();
+  const s=document.createElement("div"); s.className="scrim"; s.id="scrim";
+  s.innerHTML=`<div class="sheet" role="dialog" aria-modal="true"><div class="grab"></div>${html}</div>`;
+  s.addEventListener("click", e => { if(e.target===s) closeSheet(); });
+  document.body.appendChild(s); document.body.style.overflow="hidden";
+  onMount && onMount(s);
+}
+function closeSheet(){ const s=$("#scrim"); if(s) s.remove(); document.body.style.overflow=""; }
+document.addEventListener("keydown", e => { if(e.key==="Escape") closeSheet(); });
+
+function openEditor(n){
+  const isNew=!n; n = n || { kind:"expression", french:"", meaning:"", example:"", source:"" };
+  let kind=n.kind;
+  openSheet(`
+    <h2>${isNew?"Nouvelle note":"Modifier la note"}</h2>
+    <form id="ed">
+      <div class="field"><label>Type</label><div class="seg" id="kindSeg">
+        ${["mot","expression","phrase"].map(k=>`<button type="button" data-k="${k}" aria-pressed="${k===kind}">${KIND_LABEL[k]}</button>`).join("")}</div></div>
+      <div class="field"><label for="f-fr">En français</label><input id="f-fr" required value="${esc(n.french)}" placeholder="ex. avoir le cafard" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+      <div class="field"><label for="f-mean">Meaning</label><input id="f-mean" value="${esc(n.meaning)}" placeholder="to feel down" autocomplete="off"></div>
+      <div class="field"><label for="f-ex">Example sentence</label><textarea id="f-ex" placeholder="Depuis qu'il pleut, j'ai le cafard.">${esc(n.example)}</textarea>
+        <span class="hint">Tip: put [brackets] around the words to hide in fill-the-gap, e.g. j'[ai le cafard].</span></div>
+      <div class="field"><label for="f-src">Where I found it</label><input id="f-src" value="${esc(n.source)}" placeholder="Series, episode, book, lesson…" autocomplete="off"></div>
+      <div class="btnrow"><button type="button" class="btn ghost" id="cancel">Cancel</button><button class="btn primary" type="submit">${isNew?"Add to carnet":"Save"}</button></div>
+    </form>`, s => {
+      s.querySelectorAll("[data-k]").forEach(b => b.addEventListener("click", () => { kind=b.dataset.k; s.querySelectorAll("[data-k]").forEach(x=>x.setAttribute("aria-pressed", x===b)); }));
+      $("#cancel",s).addEventListener("click", () => isNew ? closeSheet() : openDetail(n.id));
+      $("#ed",s).addEventListener("submit", e => {
+        e.preventDefault();
+        const french=$("#f-fr",s).value.trim(); if(!french) return;
+        const changedText = french!==n.french;
+        const out = { ...n, kind, french, meaning:$("#f-mean",s).value.trim(), example:$("#f-ex",s).value.trim(), source:$("#f-src",s).value.trim() };
+        if (isNew){ out.id=uid(); out.created=Date.now(); out.box=0; out.due=0; }
+        if (changedText) delete out.ai;
+        delete out.example_seed;
+        saveNote(out); closeSheet(); toast(isNew?"Added to your carnet":"Saved");
+      });
+      if(isNew) setTimeout(()=>$("#f-fr",s).focus(), 250);
+    });
+}
+
+function videoLinks(text){
+  const q=encodeURIComponent(text.replace(/[\[\]!?.…]/g,"").trim());
+  return `<div class="vids">
+    <a class="vid" href="https://youglish.com/pronounce/${q}/french" target="_blank" rel="noopener"><strong>▶ YouGlish</strong><span>Real YouTube clips, jumps to the moment it's said</span></a>
+    <a class="vid" href="https://www.playphrase.me/#/search?q=${q}&language=fr" target="_blank" rel="noopener"><strong>▶ PlayPhrase</strong><span>Short scenes from films and series</span></a>
+  </div>`;
+}
+
+function openDetail(id){
+  const n=S.notes.find(x=>x.id===id); if(!n) return closeSheet();
+  openSheet(`
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><span class="kind ${n.kind}">${KIND_LABEL[n.kind]}</span>
+      <div class="btnrow" style="flex:none">${TTS.ok?`<button class="btn ghost" id="say" aria-label="Listen">🔊 Écouter</button>`:""}</div></div>
+    <div class="detail-fr" style="margin-top:10px">${esc(n.french)}</div>
+    ${n.meaning?`<div class="detail-mean">${esc(n.meaning)}</div>`:""}
+    ${n.example?`<div class="detail-ex">${esc(n.example.replace(/[\[\]]/g,""))}</div>`:""}
+    <div class="meta-line">${n.source?`Found in: ${esc(n.source)} · `:""}Level ${n.box||0}/5${n.seen?` · reviewed ${n.seen}×`:""}</div>
+    <div class="section-label">See it in real videos</div>
+    ${videoLinks(n.french)}
+    <div class="section-label">Note</div>
+    <div id="actions" class="btnrow"><button class="btn ghost" id="edit">Edit</button><button class="btn danger" id="del">Delete</button></div>
+  `, s => {
+    const say=$("#say",s); if(say) say.addEventListener("click", () => speak(n.french));
+    $("#edit",s).addEventListener("click", () => openEditor(n));
+    $("#del",s).addEventListener("click", () => {
+      $("#actions",s).outerHTML = `<div class="confirm" id="actions"><div>Delete “${esc(n.french)}” from your carnet? This can't be undone.</div>
+        <div class="btnrow"><button class="btn ghost" id="keep">Keep it</button><button class="btn danger" id="really">Delete</button></div></div>`;
+      $("#keep",s).addEventListener("click", () => openDetail(id));
+      $("#really",s).addEventListener("click", () => { deleteNote(id); closeSheet(); toast("Deleted"); });
+    });
+  });
+}
+function hl(sentence, target){
+  const s=esc(sentence), t=esc(target.replace(/[\[\]!?.…]/g,"").trim());
+  if(!t) return s;
+  const i=s.toLowerCase().indexOf(t.toLowerCase());
+  return i<0 ? s : s.slice(0,i)+"<mark>"+s.slice(i,i+t.length)+"</mark>"+s.slice(i+t.length);
+}
+
+/* ---------- Review hub ---------- */
+const ICONS = {
+  mix:'<path d="M4 7h3l10 10h3M4 17h3l3-3M14 10l3-3h3"/><path d="m18 5 2 2-2 2M18 15l2 2-2 2"/>',
+  flash:'<rect x="3" y="6" width="14" height="12" rx="2"/><path d="M7 3h12a2 2 0 0 1 2 2v10"/>',
+  cloze:'<path d="M4 7h4M4 12h16M4 17h7"/><path d="M11 7h9" stroke-dasharray="2 2"/>',
+  listen:'<path d="M5 10v4h3l5 4V6L8 10H5z"/><path d="M16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11"/>',
+  match:'<rect x="3" y="4" width="7" height="6" rx="1.5"/><rect x="14" y="14" width="7" height="6" rx="1.5"/><path d="M10 7h4v10h-4" />',
+  write:'<path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="m13 7 4 4"/>',
+  scene:'<path d="M4 5h16v10H9l-5 4V5z"/><path d="M8 9h8M8 12h5"/>',
+};
+const icon = k => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[k]}</svg>`;
+function renderHub(){
+  const due=S.notes.filter(isDue).length, total=S.notes.length;
+  const few = total<1;
+  const modes = [
+    ["flash","Cartes","Flip cards both ways: French → meaning, meaning → French", false],
+    ["cloze","Texte à trous","Fill the missing words in your own sentences", false],
+    ["listen","Dictée","Hear it, then type it", !TTS.ok],
+    ["match","Associer","Race to pair 5 notes with their meanings", total<3],
+  ];
+  app.innerHTML = `
+    <header class="top"><div><h1>Réviser</h1><div class="sub">Pick a game, or let the mix choose for you</div></div>${syncBadge()}</header>
+    <section class="today">
+      <div><div class="big">${due}</div><div class="lab">${due===1?"note":"notes"} due today${total&&!due?" · you're up to date":""}</div></div>
+      <div class="stats"><span>🔥 ${S.meta.streak||0}-day streak</span><span>${S.meta.reviews||0} reviews</span></div>
+      <button class="btn" id="mix" ${few?"disabled":""}>${icon("mix")} Session surprise · mixed games</button>
+    </section>
+    ${few?`<div class="empty">Add a few notes to your carnet to unlock the games.</div>`:""}
+    <div class="modes">${modes.map(([k,t,d,off])=>`<button class="mode" data-mode="${k}" ${off||few?"disabled":""}><span class="ic">${icon(k)}</span><strong>${t}</strong><span>${d}</span></button>`).join("")}</div>`;
+  $("#mix").addEventListener("click", () => startSession("mix"));
+  app.querySelectorAll("[data-mode]").forEach(b => b.addEventListener("click", () => {
+    const m=b.dataset.mode; if(m==="match") startMatch(); else startSession(m);
+  }));
+}
+
+/* ---------- Session (flash / cloze / listen / write / mix) ---------- */
+function pickNotes(max=10){
+  const due=shuffle(S.notes.filter(isDue)).sort((a,b)=>(a.box||0)-(b.box||0));
+  let picked=due.slice(0,max);
+  if (picked.length<Math.min(max,S.notes.length)){
+    const rest=shuffle(S.notes.filter(n=>!picked.includes(n))).sort((a,b)=>(a.due||0)-(b.due||0));
+    picked=picked.concat(rest.slice(0, Math.min(max,S.notes.length)-picked.length));
+  }
+  return shuffle(picked);
+}
+function startSession(mode){
+  const items=pickNotes(mode==="write"?5:10).map(n=>({ id:n.id, mode: mode==="mix" ? mixMode() : mode }));
+  UI.session={ kind:"cards", items, i:0, right:0 };
+  window.scrollTo(0,0); render(); renderStep();
+}
+function mixMode(){ const m=["flash","flash","cloze","cloze"]; if(TTS.ok) m.push("listen","listen"); return m[Math.floor(Math.random()*m.length)]; }
+function sessFrame(inner){
+  const s=UI.session, n=s.items.length;
+  app.innerHTML=`<div class="sess-top"><button class="x" id="quit" aria-label="End session">✕</button><div class="bar"><i style="width:${n?Math.round(s.i/n*100):0}%"></i></div><span class="count">${Math.min(s.i+1,n)}/${n}</span></div>${inner}`;
+  $("#quit").addEventListener("click", endSession);
+}
+function endSession(){ UI.session=null; if(TTS.ok) try{speechSynthesis.cancel()}catch{} render(); window.scrollTo(0,0); }
+function next(correct){
+  const s=UI.session; const n=S.notes.find(x=>x.id===s.items[s.i].id);
+  if(n && correct!==null) grade(n, correct);
+  if(correct) s.right++;
+  s.i++; renderStep();
+}
+function renderStep(){
+  const s=UI.session; if(!s) return;
+  if (s.i>=s.items.length) return renderDone();
+  const it=s.items[s.i]; const n=S.notes.find(x=>x.id===it.id);
+  if(!n){ s.i++; return renderStep(); }
+  ({ flash:stepFlash, cloze:stepCloze, listen:stepListen })[it.mode](n);
+}
+function renderDone(){
+  const s=UI.session;
+  app.innerHTML=`<div class="done"><div class="q-label" style="font-size:.8rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)">Session terminée</div>
+    <div class="score">${s.right}/${s.items.length}</div>
+    <div>${s.right===s.items.length?"Parfait ! Every answer right.":s.right>=s.items.length/2?"Bien joué. The misses will come back sooner.":"Courage ! Missed notes come back tomorrow."}</div>
+    <div style="color:var(--muted)">🔥 ${S.meta.streak||0}-day streak</div>
+    <div class="btnrow" style="width:100%;max-width:380px"><button class="btn ghost" id="back">Back</button><button class="btn primary" id="again">Another round</button></div></div>`;
+  $("#back").addEventListener("click", endSession);
+  $("#again").addEventListener("click", () => startSession("mix"));
+}
+function videoMini(n){ const q=encodeURIComponent(n.french.replace(/[\[\]!?.…]/g,"").trim());
+  return `<div style="font-size:.85rem">See it used: <a href="https://youglish.com/pronounce/${q}/french" target="_blank" rel="noopener" style="color:var(--accent)">YouGlish</a> · <a href="https://www.playphrase.me/#/search?q=${q}&language=fr" target="_blank" rel="noopener" style="color:var(--accent)">PlayPhrase</a></div>`; }
+function revealBlock(n){
+  return `<div class="reveal"><div class="q-big" style="font-size:1.35rem">${esc(n.french)}</div>${n.meaning?`<div style="color:var(--muted)">${esc(n.meaning)}</div>`:""}${n.example?`<div class="q-hand" style="font-size:1.1rem">${esc(n.example.replace(/[\[\]]/g,""))}</div>`:""}${videoMini(n)}</div>`;
+}
+
+function stepFlash(n){
+  const reverse = !!n.meaning && Math.random()<0.5;
+  sessFrame(`<div class="card">
+    <div class="q-label">${reverse?"How do you say it in French?":"What does it mean?"}</div>
+    <div class="q-big">${esc(reverse?n.meaning:n.french)}</div>
+    ${!reverse && n.example?`<div class="q-hand" style="opacity:.75">${esc(n.example.replace(/[\[\]]/g,""))}</div>`:""}
+    <div id="back"></div></div>
+    <div style="margin-top:14px" id="ctrl"><button class="btn primary block" id="flip">Retourner la carte</button></div>`);
+  if(!reverse && TTS.ok) speak(n.french);
+  $("#flip").addEventListener("click", () => {
+    $("#back").innerHTML = revealBlock(n);
+    if(reverse && TTS.ok) speak(n.french);
+    $("#ctrl").innerHTML=`<div class="btnrow"><button class="btn danger" id="no">Je ne savais pas</button><button class="btn good" id="yes">Je savais ✓</button></div>`;
+    $("#no").addEventListener("click", () => next(false));
+    $("#yes").addEventListener("click", () => next(true));
+  });
+}
+
+function clozeParts(n){
+  const ex=n.example||"";
+  const m=ex.match(/\[([^\]]+)\]/);
+  if (m) return { before:ex.slice(0,m.index).replace(/[\[\]]/g,""), answer:m[1], after:ex.slice(m.index+m[0].length).replace(/[\[\]]/g,"") };
+  const target=n.french.replace(/[!?.…]/g,"").trim();
+  const i=ex.toLowerCase().replace(/[’]/g,"'").indexOf(target.toLowerCase().replace(/[’]/g,"'"));
+  if (ex && target && i>=0) return { before:ex.slice(0,i), answer:ex.slice(i,i+target.length), after:ex.slice(i+target.length) };
+  return null;
+}
+function checkAnswer(given, expected){
+  if (norm(given)===norm(expected)) return "ok";
+  if (loose(given)===loose(expected)) return "close";
+  return "no";
+}
+function answerUI(prompt, expected, n, extraReveal=""){
+  return `<form id="af" style="display:flex;flex-direction:column;gap:12px">
+    <input class="answer-in" id="ans" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="${esc(prompt)}" aria-label="Your answer">
+    <div class="btnrow"><button type="button" class="btn ghost" id="skip">Je ne sais pas</button><button class="btn primary" type="submit">Vérifier</button></div></form>
+    <div id="fb"></div>`;
+}
+function bindAnswer(n, expected){
+  const done = (res) => {
+    const msg = res==="ok" ? `<b>Exact !</b>` : res==="close" ? `<b>Presque !</b> Watch the accents: <b>${esc(expected)}</b>` : `<b>Pas tout à fait.</b> The answer: <b>${esc(expected)}</b>`;
+    $("#fb").innerHTML = `<div class="feedback ${res}">${msg}</div>${revealBlock(n)}<div style="margin-top:12px"><button class="btn primary block" id="go">Continuer</button></div>`;
+    $("#af").remove(); if(TTS.ok) speak(n.french);
+    $("#go").addEventListener("click", () => next(res!=="no")); $("#go").focus();
+  };
+  $("#af").addEventListener("submit", e => { e.preventDefault(); const v=$("#ans").value; if(!v.trim()) return; done(checkAnswer(v, expected)); });
+  $("#skip").addEventListener("click", () => done("no"));
+  setTimeout(()=>{ const a=$("#ans"); a && a.focus(); }, 60);
+}
+function stepCloze(n){
+  const p=clozeParts(n);
+  if (p){
+    sessFrame(`<div class="card"><div class="q-label">Complète la phrase</div>
+      <div class="q-hand">${esc(p.before)}<span class="gap">${esc(p.answer)}</span>${esc(p.after)}</div>
+      ${n.meaning?`<div style="color:var(--muted);font-size:.9rem">Hint: ${esc(n.meaning)}</div>`:""}
+      ${answerUI("Type the missing words", p.answer, n)}</div>`);
+    bindAnswer(n, p.answer);
+  } else if (n.meaning){
+    sessFrame(`<div class="card"><div class="q-label">Écris-le en français</div><div class="q-big">${esc(n.meaning)}</div>
+      ${answerUI("En français…", n.french, n)}</div>`);
+    bindAnswer(n, n.french.replace(/[!?.…]+$/,"").trim());
+  } else return stepFlash(n);
+}
+function stepListen(n){
+  if(!TTS.ok) return stepFlash(n);
+  const text = n.kind==="phrase" || !n.example ? n.french : n.french;
+  sessFrame(`<div class="card"><div class="q-label">Dictée · écoute et écris</div>
+    <button class="speak" id="play" aria-label="Play">${icon("listen")}</button>
+    <div style="text-align:center"><button class="btn ghost" id="slow" style="min-height:36px;padding:6px 12px">🐢 Plus lentement</button></div>
+    ${answerUI("Ce que tu entends…", text, n)}</div>`);
+  $("#play").addEventListener("click", () => speak(text));
+  $("#slow").addEventListener("click", () => speak(text, 0.6));
+  speak(text);
+  bindAnswer(n, text.replace(/[!?.…]+$/,"").trim());
+}
+/* ---------- Match game ---------- */
+function startMatch(){
+  const pool=shuffle(S.notes.filter(n=>n.meaning)).slice(0,5);
+  if(pool.length<3){ toast("Add meanings to at least 3 notes to play"); return; }
+  UI.session={ kind:"match" };
+  const left=shuffle(pool.map(n=>({id:n.id,t:n.french,side:"fr"}))), right=shuffle(pool.map(n=>({id:n.id,t:n.meaning,side:"en"})));
+  const t0=Date.now(); let sel=null, found=0, misses=0;
+  render(); window.scrollTo(0,0);
+  app.innerHTML=`<div class="sess-top"><button class="x" id="quit" aria-label="End game">✕</button><div class="bar"><i id="mbar" style="width:0%"></i></div><span class="count" id="timer">0 s</span></div>
+    <div class="q-label" style="font-size:.75rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Associe chaque expression à son sens</div>
+    <div class="match">${left.map((a,i)=>`<button class="tile fr" data-id="${a.id}" data-side="fr" style="grid-column:1;grid-row:${i+1}">${esc(a.t)}</button>`).join("")}
+    ${right.map((a,i)=>`<button class="tile" data-id="${a.id}" data-side="en" style="grid-column:2;grid-row:${i+1}">${esc(a.t)}</button>`).join("")}</div>`;
+  const iv=setInterval(()=>{ const t=$("#timer"); if(!t){clearInterval(iv);return;} t.textContent=Math.round((Date.now()-t0)/1000)+" s"; }, 500);
+  $("#quit").addEventListener("click", ()=>{ clearInterval(iv); endSession(); });
+  app.querySelectorAll(".tile").forEach(b => b.addEventListener("click", () => {
+    if(b.classList.contains("gone")) return;
+    if(b.dataset.side==="fr" && TTS.ok) speak(b.textContent);
+    if(!sel || sel.dataset.side===b.dataset.side){ if(sel) sel.classList.remove("sel"); sel=b; b.classList.add("sel"); return; }
+    if(sel.dataset.id===b.dataset.id){
+      [sel,b].forEach(x=>{x.classList.remove("sel");x.classList.add("gone");}); found++; sel=null;
+      $("#mbar").style.width=Math.round(found/pool.length*100)+"%";
+      if(found===pool.length){ clearInterval(iv); const secs=Math.round((Date.now()-t0)/1000);
+        const best=lsGet("carnet.matchBest",null); const isBest=!best||secs<best; if(isBest) lsSet("carnet.matchBest",secs);
+        setTimeout(()=>{ app.innerHTML=`<div class="done"><div class="score">${secs} s</div><div>${misses===0?"Sans faute !":misses+" wrong pair"+(misses>1?"s":"")}${isBest?" · new personal best 🏆":best?` · best: ${best} s`:""}</div>
+          <div class="btnrow" style="width:100%;max-width:380px"><button class="btn ghost" id="back">Back</button><button class="btn primary" id="again">Rejouer</button></div></div>`;
+          $("#back").addEventListener("click", endSession); $("#again").addEventListener("click", startMatch); }, 350); }
+    } else { misses++; [sel,b].forEach(x=>{x.classList.add("shake"); setTimeout(()=>x.classList.remove("shake","sel"),360);}); sel=null; }
+  }));
+}
+
+render();
+if ("serviceWorker" in navigator) { window.addEventListener("load", () => { navigator.serviceWorker.register("./sw.js").catch(()=>{}); }); }
+})();
+</script>
+</body>
+</html>
