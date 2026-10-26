@@ -431,7 +431,7 @@ mark{background:color-mix(in srgb,var(--gold) 28%,transparent);color:inherit;bor
 (() => {
 "use strict";
 const OFFLINE = true;
-const APP_VERSION = 27;
+const APP_VERSION = 30;
 const CLAUDE_CARNET = "https://claude.ai/artifact/SkJpyQF39EEnoKqUSY5DPX";
 
 /* ---------- helpers ---------- */
@@ -518,7 +518,7 @@ function grade(n, correct){
 const streakNow = () => (S.meta.lastDay===dayKey(Date.now()) || S.meta.lastDay===dayKey(Date.now()-DAY)) ? (S.meta.streak||0) : 0;
 
 /* ---------- IA ---------- */
-async function askJSON(prompt){ if(!S.ai) throw { code:"unavailable" }; return await S.ai.json(prompt, { modelTier:"default" }); }
+async function askJSON(prompt, opts){ if(!S.ai) throw { code:"unavailable" }; return await S.ai.json(prompt, opts || { modelTier:"default" }); }
 function aiErr(e){
   if(e && e.code==="not_granted"){ S.ai=null; return "L'aide de l'IA est désactivée pour cette page. Tu peux l'autoriser dans le menu des autorisations de la page."; }
   if(e && e.code==="rate_limited") return "Trop de demandes pour le moment. Réessaie dans une minute.";
@@ -832,34 +832,134 @@ function openSheet(html, onMount){
 function closeSheet(){ const s=$("#scrim"); if(s) s.remove(); document.body.style.overflow=""; }
 document.addEventListener("keydown", e => { if(e.key==="Escape") closeSheet(); });
 
+/* ---------- remplissage automatique : sens + exemple ---------- */
+const stripHTML = h => { try{ return (new DOMParser().parseFromString(String(h||""),"text/html").body.textContent||"").replace(/\s+/g," ").trim(); }catch{ return String(h||"").replace(/<[^>]+>/g,"").trim(); } };
+const guessKind = t => { const w=t.trim().split(/\s+/).length; return (w>=5 || /[.!?…]$/.test(t.trim())) ? "phrase" : w>1 ? "expression" : "mot"; };
+const fillPrompt = text => `A learner of French (B2-C1) added this to her vocabulary notebook: """${text}"""
+Return JSON only:
+{"kind": "mot" for a single word (with or without article), "expression" for an idiom or fixed phrase, "phrase" for a full sentence,
+ "french": the same text, only fixing a clear spelling or accent mistake (otherwise exactly as given),
+ "meaning": a short, natural English meaning (for a sentence: its English translation; for a word with several meanings, the most common one, max 2 meanings separated by " / "),
+ "example": one natural, everyday French example sentence using it, with the item itself wrapped in [square brackets] exactly where it appears (conjugate or adapt it if needed). For a full sentence, give a different short sentence that reuses its key expression, also bracketed.}`;
+const normFill = (r, text) => ({ kind:["mot","expression","phrase"].includes(r.kind)?r.kind:guessKind(text), french:String(r.french||text).trim(), meaning:String(r.meaning||"").trim(), example:String(r.example||"").trim() });
+async function lookupAI(text){
+  const r = await askJSON(fillPrompt(text), { model:"claude-haiku-5-5", modelTier:"quick" });
+  return normFill(r, text);
+}
+/* phone app: Claude Haiku 5.5 through the person's own API key (stored only on this phone) */
+const API_MODEL = "claude-haiku-5-5";
+const getKey = () => { try{ return localStorage.getItem("carnet.apikey") || ""; }catch{ return ""; } };
+async function lookupAPI(text){
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method:"POST",
+    headers:{ "content-type":"application/json", "x-api-key":getKey(), "anthropic-version":"2023-06-01", "anthropic-dangerous-direct-browser-access":"true" },
+    body: JSON.stringify({ model:API_MODEL, max_tokens:400, messages:[{ role:"user", content: fillPrompt(text) }] })
+  });
+  if (!res.ok){ const e = new Error("api"); e.status = res.status; throw e; }
+  const j = await res.json();
+  const txt = (j.content||[]).map(c=>c.text||"").join("");
+  const m = txt.match(/\{[\s\S]*\}/); if(!m) throw new Error("format");
+  return normFill(JSON.parse(m[0]), text);
+}
+async function lookupOnline(text){
+  // phone app: free online dictionaries (needs internet)
+  const out = { kind:guessKind(text), french:text, meaning:"", example:"" };
+  const base = text.trim().replace(/^(le |la |les |l'|l’|un |une |des |du |de la )/i,"").replace(/[!?.…]+$/,"");
+  if (out.kind!=="phrase"){
+    for (const t of [base, base.toLowerCase()]){
+      try{
+        const r = await fetch("https://en.wiktionary.org/api/rest_v1/page/definition/"+encodeURIComponent(t.replace(/ /g,"_")));
+        if (!r.ok) continue;
+        const j = await r.json(); const fr = j && j.fr;
+        if (!fr || !fr.length) continue;
+        const defs = fr.flatMap(x => x.definitions || []).filter(d => stripHTML(d.definition));
+        if (!defs.length) continue;
+        out.meaning = defs.slice(0,2).map(d => stripHTML(d.definition)).filter((v,i,a)=>a.indexOf(v)===i).join(" / ").slice(0,140);
+        const exs = defs.flatMap(d => [...(d.parsedExamples||[]).map(e=>e.example), ...(d.examples||[])]).map(stripHTML).filter(e => e && e.length < 170);
+        if (exs.length) out.example = exs[0];
+        break;
+      }catch{}
+    }
+  }
+  if (!out.meaning){
+    try{
+      const r = await fetch("https://api.mymemory.translated.net/get?langpair=fr|en&q="+encodeURIComponent(text.trim()));
+      const j = await r.json(); const t = j && j.responseData && j.responseData.translatedText;
+      if (t && !/MYMEMORY WARNING|QUERY LENGTH/i.test(t)) out.meaning = stripHTML(t);
+    }catch{}
+  }
+  if (out.example && base){
+    const i = out.example.toLowerCase().indexOf(base.toLowerCase());
+    if (i>=0) out.example = out.example.slice(0,i)+"["+out.example.slice(i,i+base.length)+"]"+out.example.slice(i+base.length);
+  }
+  return out;
+}
+const canAutoFill = () => !!S.ai || OFFLINE;
+async function autoFill(text){
+  if (S.ai) return lookupAI(text);
+  if (false){
+    try{ return await lookupAPI(text); }
+    catch(e){ if (e.status===401 || e.status===403){ const err=new Error("key"); err.keyProblem=true; throw err; } return lookupOnline(text); }
+  }
+  return lookupOnline(text);
+}
+
 function openEditor(n, prefill){
   const isNew=!n; n = n || { kind:"expression", french:prefill||"", meaning:"", example:"", source:"" };
-  let kind=n.kind;
+  let kind = isNew && prefill ? guessKind(prefill) : n.kind;
   openSheet(`
     <h2>${isNew?"Nouvelle note":"Modifier la note"}</h2>
     <form id="ed">
+      <div class="field"><label for="f-fr">En français</label>
+        <div style="display:flex;gap:8px"><input id="f-fr" required value="${esc(n.french)}" placeholder="ex. avoir le cafard" autocomplete="off" autocapitalize="off" spellcheck="false" style="flex:1;min-width:0">
+        ${canAutoFill()?`<button type="button" class="btn" id="fill" style="flex:none;padding:0 14px;background:var(--shop-glass);color:var(--shop-sign)">✦ Remplir</button>`:""}</div>
+        <span class="hint" id="fillMsg">${canAutoFill()?"Écris le mot, l'expression ou la phrase : je trouve le sens et un exemple.":""}</span></div>
       <div class="field"><label>Type</label><div class="seg">
         ${["mot","expression","phrase"].map(k=>`<button type="button" data-k="${k}" aria-pressed="${k===kind}">${KIND_LABEL[k]}</button>`).join("")}</div></div>
-      <div class="field"><label for="f-fr">En français</label><input id="f-fr" required value="${esc(n.french)}" placeholder="ex. avoir le cafard" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
       <div class="field"><label for="f-mean">Sens</label><input id="f-mean" value="${esc(n.meaning)}" placeholder="ex. to feel down" autocomplete="off"></div>
       <div class="field"><label for="f-ex">Phrase d'exemple</label><textarea id="f-ex" placeholder="Depuis qu'il pleut, j'ai le cafard.">${esc(n.example)}</textarea>
-        <span class="hint">Astuce : mets entre [crochets] les mots à cacher dans le texte à trous, par ex. j'[ai le cafard].</span></div>
+        <span class="hint">Les mots entre [crochets] seront cachés dans le texte à trous.</span></div>
       <div class="field"><label for="f-src">Où je l'ai trouvé</label><input id="f-src" value="${esc(n.source)}" placeholder="Série, épisode, livre, leçon…" autocomplete="off"></div>
       <div class="btnrow"><button type="button" class="btn ghost" id="cancel">Annuler</button><button class="btn primary" type="submit">${isNew?"Ajouter au carnet":"Enregistrer"}</button></div>
     </form>`, s => {
-      s.querySelectorAll("[data-k]").forEach(b => b.addEventListener("click", () => { kind=b.dataset.k; s.querySelectorAll("[data-k]").forEach(x=>x.setAttribute("aria-pressed", x===b)); }));
+      const setKind = k => { kind=k; s.querySelectorAll("[data-k]").forEach(x=>x.setAttribute("aria-pressed", x.dataset.k===k)); };
+      s.querySelectorAll("[data-k]").forEach(b => b.addEventListener("click", () => setKind(b.dataset.k)));
       $("#cancel",s).addEventListener("click", () => isNew ? closeSheet() : openDetail(n.id));
+      const fr=$("#f-fr",s), mean=$("#f-mean",s), ex=$("#f-ex",s), msg=$("#fillMsg",s), btn=$("#fill",s);
+      let busy=false, lastFilled="";
+      async function fill(force){
+        const text=fr.value.trim(); if(!text || busy || !canAutoFill()) return;
+        if(!force && (mean.value.trim() || ex.value.trim())) return;
+        busy=true; lastFilled=text; if(btn){ btn.disabled=true; btn.textContent="…"; }
+        msg.innerHTML=`<span style="display:inline-flex;align-items:center;gap:8px"><span class="spinner" style="width:16px;height:16px;border-width:2px"></span>Je cherche le sens et un exemple…</span>`;
+        try{
+          const r = await autoFill(text);
+          if (!document.body.contains(fr)) return;
+          if (r.french && r.french!==text && fr.value.trim()===text) fr.value=r.french;
+          if (force || !mean.value.trim()) mean.value = r.meaning || mean.value;
+          if (force || !ex.value.trim()) ex.value = r.example || ex.value;
+          setKind(r.kind);
+          msg.textContent = (r.meaning||r.example) ? "Rempli pour toi. Tu peux tout modifier avant d'enregistrer." : "Je n'ai rien trouvé. Tu peux écrire le sens toi-même.";
+        }catch(e){
+          msg.textContent = S.ai ? aiErr(e) : e && e.keyProblem ? "Ta clé API Claude a été refusée. Vérifie-la dans Sauvegarde → Claude." : "Pas de connexion internet. Tu peux enregistrer maintenant et compléter plus tard.";
+        }finally{ busy=false; if(btn){ btn.disabled=false; btn.textContent="✦ Remplir"; } }
+      }
+      if (btn) btn.addEventListener("click", () => fill(true));
+      fr.addEventListener("input", () => setKind(guessKind(fr.value)));
+      fr.addEventListener("blur", () => { if (fr.value.trim() && fr.value.trim()!==lastFilled) fill(false); });
+      fr.addEventListener("keydown", e => { if (e.key==="Enter"){ e.preventDefault(); fill(true); } });
       $("#ed",s).addEventListener("submit", e => {
         e.preventDefault();
-        const french=$("#f-fr",s).value.trim(); if(!french) return;
-        const out = { ...n, kind, french, meaning:$("#f-mean",s).value.trim(), example:$("#f-ex",s).value.trim(), source:$("#f-src",s).value.trim() };
+        const french=fr.value.trim(); if(!french) return;
+        const out = { ...n, kind, french, meaning:mean.value.trim(), example:ex.value.trim(), source:$("#f-src",s).value.trim() };
         if (isNew){ out.id=uid(); out.created=Date.now(); out.box=0; out.due=0; }
         if (french!==n.french) delete out.ai;
         delete out.example_seed;
         saveNote(out); closeSheet(); toast(isNew?"Ajouté au carnet":"Enregistré");
         const qi=$("#quickIn"); if(qi) qi.value="";
       });
-      setTimeout(()=>{ const f = isNew && prefill ? $("#f-mean",s) : isNew ? $("#f-fr",s) : null; f && f.focus(); }, 250);
+      if (isNew && prefill && canAutoFill()) fill(false);
+      else setTimeout(()=>{ if(isNew) fr.focus(); }, 250);
     });
 }
 
@@ -946,6 +1046,17 @@ function openBackup(){
     <input type="file" id="impFile" class="vh" accept=".json,application/json,text/plain" tabindex="-1" aria-hidden="true">
     <div id="bkMsg" style="margin-top:14px"></div>`, s => {
     const msg = (cls, t) => { $("#bkMsg",s).innerHTML = `<div class="feedback ${cls}">${esc(t)}</div>`; };
+    const sk=$("#saveKey",s);
+    if (sk) sk.addEventListener("click", async () => {
+      const v=$("#apiKey",s).value.trim(); const km=$("#keyMsg",s);
+      if (!/^sk-ant-/.test(v)){ km.innerHTML=`<div class="feedback no">Cette clé ne ressemble pas à une clé Claude. Elle doit commencer par sk-ant-.</div>`; return; }
+      try{ localStorage.setItem("carnet.apikey", v); }catch{}
+      km.innerHTML=`<div class="loading"><div class="spinner"></div>Je vérifie la clé…</div>`;
+      try{ await lookupAPI("bonjour"); km.innerHTML=`<div class="feedback ok">Clé enregistrée. ✦ Remplir utilise maintenant Claude Haiku 5.5.</div>`; $("#apiKey",s).value=""; }
+      catch(e){ km.innerHTML = e.status===401||e.status===403 ? `<div class="feedback no">Clé refusée par Claude. Vérifie-la et réessaie.</div>` : `<div class="feedback close">Clé enregistrée, mais je n'ai pas pu la tester (pas d'internet ?). Elle sera utilisée dès que possible.</div>`; }
+    });
+    const dk=$("#delKey",s);
+    if (dk) dk.addEventListener("click", () => { try{ localStorage.removeItem("carnet.apikey"); }catch{} openBackup(); toast("Clé supprimée"); });
     const exp=$("#exp",s);
     if (exp) exp.addEventListener("click", async () => {
       const d=new Date(), stamp=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
