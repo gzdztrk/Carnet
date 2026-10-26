@@ -431,7 +431,7 @@ mark{background:color-mix(in srgb,var(--gold) 28%,transparent);color:inherit;bor
 (() => {
 "use strict";
 const OFFLINE = true;
-const APP_VERSION = 30;
+const APP_VERSION = 31;
 const CLAUDE_CARNET = "https://claude.ai/artifact/SkJpyQF39EEnoKqUSY5DPX";
 
 /* ---------- helpers ---------- */
@@ -846,6 +846,14 @@ async function lookupAI(text){
   const r = await askJSON(fillPrompt(text), { model:"claude-haiku-5-5", modelTier:"quick" });
   return normFill(r, text);
 }
+/* phone app: free AI through the person's own Groq relay (Cloudflare Worker) */
+const getRelay = () => { try{ return localStorage.getItem("carnet.relay") || ""; }catch{ return ""; } };
+async function lookupRelay(text){
+  const res = await fetch(getRelay(), { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify({ text }) });
+  if (!res.ok){ const e=new Error("relay"); e.status=res.status; throw e; }
+  const j = await res.json(); if (j.error){ const e=new Error(j.error); e.status=500; throw e; }
+  return normFill(j, text);
+}
 /* phone app: Claude Haiku 5.5 through the person's own API key (stored only on this phone) */
 const API_MODEL = "claude-haiku-5-5";
 const getKey = () => { try{ return localStorage.getItem("carnet.apikey") || ""; }catch{ return ""; } };
@@ -897,6 +905,9 @@ async function lookupOnline(text){
 const canAutoFill = () => !!S.ai || OFFLINE;
 async function autoFill(text){
   if (S.ai) return lookupAI(text);
+  if (OFFLINE && getRelay()){
+    try{ return await lookupRelay(text); }catch(e){ return lookupOnline(text); }
+  }
   if (false){
     try{ return await lookupAPI(text); }
     catch(e){ if (e.status===401 || e.status===403){ const err=new Error("key"); err.keyProblem=true; throw err; } return lookupOnline(text); }
@@ -1038,7 +1049,15 @@ function openBackup(){
     <div class="meta-line">${plural(S.notes.length,"note","notes")} · Dernière sauvegarde : ${last}</div>
     <div class="btnrow" style="margin-top:18px"><button class="btn primary" id="exp">Faire une sauvegarde</button><button class="btn ghost" id="imp">Restaurer un fichier</button></div>
     <input type="file" id="impFile" class="vh" accept=".json,application/json,text/plain" tabindex="-1" aria-hidden="true">
-    <div id="bkMsg" style="margin-top:14px"></div>` : `
+    <div id="bkMsg" style="margin-top:14px"></div>
+    <div class="section-label">Groq pour ✦ Remplir (gratuit)</div>
+    <div class="ai-box">
+      <div style="font-size:.95rem">Colle ici l'adresse de ton relais Cloudflare. ✦ Remplir utilisera alors l'IA de Groq pour trouver le sens et un exemple.${getRelay()?` <b style="color:var(--ok)">Relais enregistré ✓</b>`:""}</div>
+      <label class="field" style="margin:0"><span style="font-size:.85rem;font-weight:700;color:var(--muted)">Adresse du relais</span>
+        <input id="relayUrl" type="url" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(getRelay())}" placeholder="https://carnet-relay.….workers.dev"></label>
+      <div class="btnrow"><button class="btn primary" id="saveRelay" type="button">Enregistrer et tester</button>${getRelay()?`<button class="btn ghost" id="delRelay" type="button">Supprimer</button>`:""}</div>
+      <div id="relayMsg"></div>
+    </div>` : `
     <h2>Sauvegarde</h2>
     <p style="margin:0 0 10px">${S.mode==="cloud"?"Tes notes sont enregistrées sur ton compte.":"Tes notes sont gardées dans ce navigateur."} Pour ajouter les notes de ta version hors ligne : dans l'appli, touche <b>Sauvegarde → Faire une sauvegarde</b>, puis choisis ce fichier ici.</p>
     <div class="meta-line">${plural(S.notes.length,"note","notes")} ici</div>
@@ -1046,6 +1065,18 @@ function openBackup(){
     <input type="file" id="impFile" class="vh" accept=".json,application/json,text/plain" tabindex="-1" aria-hidden="true">
     <div id="bkMsg" style="margin-top:14px"></div>`, s => {
     const msg = (cls, t) => { $("#bkMsg",s).innerHTML = `<div class="feedback ${cls}">${esc(t)}</div>`; };
+    const sr=$("#saveRelay",s);
+    if (sr) sr.addEventListener("click", async () => {
+      let v=$("#relayUrl",s).value.trim(); const rm=$("#relayMsg",s);
+      if (v && !/^https?:\/\//.test(v)) v="https://"+v;
+      if (!/^https:\/\/[^\s]+\.workers\.dev\/?$/.test(v)){ rm.innerHTML=`<div class="feedback no">L'adresse doit ressembler à https://carnet-relay.ton-nom.workers.dev</div>`; return; }
+      try{ localStorage.setItem("carnet.relay", v); }catch{}
+      rm.innerHTML=`<div class="loading"><div class="spinner"></div>Je teste le relais…</div>`;
+      try{ const r=await lookupRelay("bonjour"); rm.innerHTML=`<div class="feedback ok">Ça marche ! Exemple : « ${esc(r.example||r.meaning)} »</div>`; }
+      catch(e){ rm.innerHTML=`<div class="feedback close">Adresse enregistrée, mais le test a échoué${e.status?` (erreur ${e.status})`:""}. Vérifie la clé GROQ_KEY dans Cloudflare, puis réessaie.</div>`; }
+    });
+    const dr=$("#delRelay",s);
+    if (dr) dr.addEventListener("click", () => { try{ localStorage.removeItem("carnet.relay"); }catch{} openBackup(); toast("Relais supprimé"); });
     const sk=$("#saveKey",s);
     if (sk) sk.addEventListener("click", async () => {
       const v=$("#apiKey",s).value.trim(); const km=$("#keyMsg",s);
