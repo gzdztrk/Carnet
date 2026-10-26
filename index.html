@@ -431,7 +431,7 @@ mark{background:color-mix(in srgb,var(--gold) 28%,transparent);color:inherit;bor
 (() => {
 "use strict";
 const OFFLINE = true;
-const APP_VERSION = 31;
+const APP_VERSION = 33;
 const CLAUDE_CARNET = "https://claude.ai/artifact/SkJpyQF39EEnoKqUSY5DPX";
 
 /* ---------- helpers ---------- */
@@ -660,7 +660,7 @@ const app = $("#app");
 document.querySelectorAll(".tab[data-tab]").forEach(b => b.addEventListener("click", () => goTab(b.dataset.tab)));
 $("#addTab").addEventListener("click", () => openEditor());
 document.addEventListener("click", e => { if (e.target.closest && e.target.closest("#backupBtn")) openBackup(); });
-function goTab(t){ UI.tab=t; UI.session=null; render(); window.scrollTo(0,0); }
+function goTab(t){ if (t!==UI.tab){ UI.q=""; UI.filter="all"; } UI.tab=t; UI.session=null; render(); window.scrollTo(0,0); }
 
 let linkGame = (!OFFLINE && ["ecrire","scene"].includes(location.hash.slice(1))) ? location.hash.slice(1) : null;
 function openFromLink(tries=0){
@@ -773,6 +773,7 @@ function renderCarnet(){
   bindNotes(app);
   const ex=$("#addExamples"); if(ex) ex.addEventListener("click", addExamples);
   const nw=$("#addFirst"); if(nw) nw.addEventListener("click", () => openEditor());
+  const cs=$("#clearSearch"); if(cs) cs.addEventListener("click", () => { UI.q=""; UI.filter="all"; render(); });
 }
 function bindNotes(root){ root.querySelectorAll("[data-open]").forEach(b => b.addEventListener("click", () => openDetail(b.dataset.open))); }
 function noteCard(n){
@@ -785,7 +786,7 @@ function noteCard(n){
   </button>`;
 }
 function emptyState(){
-  if (S.notes.length) return `<div class="empty">Aucune note ne correspond à ta recherche.</div>`;
+  if (S.notes.length) return `<div class="empty"><div>Aucune note ne correspond à ${UI.q?`« ${esc(UI.q)} »`:"ce filtre"}.</div><button class="btn ghost" id="clearSearch">Effacer la recherche</button></div>`;
   return `<div class="empty">${picnicSVG}<h2>Ton carnet est vide</h2>
     <div>Ajoute les mots, expressions et phrases que tu rencontres.</div>
     <div class="btnrow" style="width:100%;max-width:380px"><button class="btn primary" id="addFirst">Ajouter une note</button><button class="btn ghost" id="addExamples">Ajouter 6 exemples</button></div></div>`;
@@ -850,8 +851,8 @@ async function lookupAI(text){
 const getRelay = () => { try{ return localStorage.getItem("carnet.relay") || ""; }catch{ return ""; } };
 async function lookupRelay(text){
   const res = await fetch(getRelay(), { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify({ text }) });
-  if (!res.ok){ const e=new Error("relay"); e.status=res.status; throw e; }
-  const j = await res.json(); if (j.error){ const e=new Error(j.error); e.status=500; throw e; }
+  let j={}; try{ j = await res.json(); }catch{}
+  if (!res.ok || j.error){ const e=new Error("relay"); e.status=res.status; e.groq=String(j.error||""); throw e; }
   return normFill(j, text);
 }
 /* phone app: Claude Haiku 5.5 through the person's own API key (stored only on this phone) */
@@ -905,14 +906,20 @@ async function lookupOnline(text){
 const canAutoFill = () => !!S.ai || OFFLINE;
 async function autoFill(text){
   if (S.ai) return lookupAI(text);
-  if (OFFLINE && getRelay()){
-    try{ return await lookupRelay(text); }catch(e){ return lookupOnline(text); }
+  if (OFFLINE){
+    if (!getRelay()){ const e=new Error("norelay"); e.noRelay=true; throw e; }
+    return lookupRelay(text);
   }
-  if (false){
-    try{ return await lookupAPI(text); }
-    catch(e){ if (e.status===401 || e.status===403){ const err=new Error("key"); err.keyProblem=true; throw err; } return lookupOnline(text); }
-  }
-  return lookupOnline(text);
+  throw new Error("unavailable");
+}
+function groqErr(e){
+  if (e && e.noRelay) return "Pour remplir automatiquement, ajoute ton relais Groq dans Sauvegarde → Groq pour ✦ Remplir.";
+  const g = (e && e.groq) || "";
+  if (/groq_(429|498|500|502|503|504)/.test(g) || (e && (e.status===429 || e.status===503)))
+    return "Groq est très occupé en ce moment. Attends une minute, puis touche ✦ Remplir.";
+  if (/groq_401|missing_key/.test(g)) return "La clé Groq ne fonctionne plus. Vérifie GROQ_KEY dans Cloudflare.";
+  if (e instanceof TypeError || (e && e.name==="TypeError")) return "Pas de connexion internet. Reconnecte-toi, puis touche ✦ Remplir.";
+  return "Groq n'a pas pu répondre" + (e && e.status ? ` (erreur ${e.status})` : "") + ". Attends un moment et réessaie.";
 }
 
 function openEditor(n, prefill){
@@ -950,9 +957,9 @@ function openEditor(n, prefill){
           if (force || !mean.value.trim()) mean.value = r.meaning || mean.value;
           if (force || !ex.value.trim()) ex.value = r.example || ex.value;
           setKind(r.kind);
-          msg.textContent = (r.meaning||r.example) ? "Rempli pour toi. Tu peux tout modifier avant d'enregistrer." : "Je n'ai rien trouvé. Tu peux écrire le sens toi-même.";
+          msg.textContent = (r.meaning||r.example) ? "Rempli pour toi. Tu peux tout modifier avant d'enregistrer." : "Groq n'a rien trouvé. Vérifie l'orthographe ou réessaie.";
         }catch(e){
-          msg.textContent = S.ai ? aiErr(e) : e && e.keyProblem ? "Ta clé API Claude a été refusée. Vérifie-la dans Sauvegarde → Claude." : "Pas de connexion internet. Tu peux enregistrer maintenant et compléter plus tard.";
+          msg.innerHTML = `<div class="feedback close" style="margin-top:4px">${esc(S.ai ? aiErr(e) : groqErr(e))}</div>`;
         }finally{ busy=false; if(btn){ btn.disabled=false; btn.textContent="✦ Remplir"; } }
       }
       if (btn) btn.addEventListener("click", () => fill(true));
