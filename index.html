@@ -262,6 +262,15 @@ body.sparkling .sparkle circle{animation:spark .9s ease-in-out infinite}
 
 /* note cards — café menu */
 .list{display:flex;flex-direction:column;gap:12px}
+.folder{margin-top:14px}
+.folder-head{width:100%;display:flex;align-items:center;gap:12px;padding:14px 16px;min-height:64px;border:1px solid var(--line);border-radius:18px;background:var(--glass);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);box-shadow:var(--shadow);font:inherit;color:var(--text);text-align:left}
+.folder-ic{width:50px;height:45px;flex:none;overflow:visible}
+.folder-name{font-family:var(--f-display);font-weight:700;font-size:1.1rem;flex:1}
+.folder-n{font-size:.85rem;color:var(--muted);font-weight:700}
+.folder-chev{color:var(--muted);transition:transform .2s}
+.folder.open .folder-chev{transform:rotate(90deg)}
+.folder-empty{margin:0;padding:14px 16px;border:1px dashed var(--line);border-radius:16px;color:var(--muted);font-size:.95rem}
+.folder-body{padding:12px 0 0 14px;border-left:2px dashed var(--line);margin-left:22px}
 .note{border:1px solid var(--line);border-radius:var(--r);padding:0;width:100%;background:var(--glass);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);box-shadow:var(--shadow);display:flex;align-items:stretch;gap:0}
 .note-main{flex:1 1 auto;min-width:0;border:0;background:none;font:inherit;color:inherit;text-align:left;padding:14px 10px 14px 36px;display:flex;flex-direction:column;justify-content:center;gap:6px;cursor:pointer;min-height:74px}
 .note-meta{display:flex;align-items:center;gap:10px}
@@ -460,7 +469,7 @@ mark{background:color-mix(in srgb,var(--gold) 28%,transparent);color:inherit;bor
 (() => {
 "use strict";
 const OFFLINE = true;
-const APP_VERSION = 41;
+const APP_VERSION = 46;
 const CLAUDE_CARNET = "https://claude.ai/artifact/SkJpyQF39EEnoKqUSY5DPX";
 
 /* ---------- helpers ---------- */
@@ -830,6 +839,50 @@ function renderHome(){
 }
 
 /* ---------- Carnet ---------- */
+const FOLDER_IC = {
+  // Cette semaine : une bulle de mots toute neuve
+  week:`<svg class="folder-ic" viewBox="0 0 44 40" aria-hidden="true">
+    <path d="M6 4h28a5 5 0 0 1 5 5v15a5 5 0 0 1-5 5H18l-8 7v-7H6a5 5 0 0 1-5-5V9a5 5 0 0 1 5-5z" fill="#E87F8E"/>
+    <path d="M6 4h28a5 5 0 0 1 5 5v3H1V9a5 5 0 0 1 5-5z" fill="#F29CA8"/>
+    <text x="20" y="23.5" text-anchor="middle" font-family="Comfortaa, sans-serif" font-weight="700" font-size="14" fill="#fff">Aa</text>
+    <path d="M39 1.5l1.2 2.8 2.8 1.2-2.8 1.2L39 9.5l-1.2-2.8L35 5.5l2.8-1.2z" fill="#F2B65A"/></svg>`,
+  // Ce mois-ci : une petite pile de cartes de mots
+  month:`<svg class="folder-ic" viewBox="0 0 44 40" aria-hidden="true">
+    <rect x="9" y="3" width="28" height="20" rx="4" transform="rotate(-9 23 13)" fill="#7FA3DA"/>
+    <rect x="7" y="9" width="29" height="21" rx="4" transform="rotate(5 21 19)" fill="#F2B65A"/>
+    <rect x="5" y="14" width="30" height="22" rx="4" fill="#FFF8EC" stroke="#4467A8" stroke-width="1.6"/>
+    <text x="20" y="30" text-anchor="middle" font-family="Comfortaa, sans-serif" font-weight="700" font-size="11.5" fill="#4467A8">abc</text>
+    <path d="M10 19h7" stroke="#D9545C" stroke-width="1.8" stroke-linecap="round"/></svg>`,
+  // Plus ancien : un vieux livre avec son ruban
+  old:`<svg class="folder-ic" viewBox="0 0 44 40" aria-hidden="true">
+    <path d="M7 6a3 3 0 0 1 3-3h24a2 2 0 0 1 2 2v28H10a3 3 0 0 0-3 3z" fill="#A8434B"/>
+    <path d="M7 36a3 3 0 0 1 3-3h26v4H10a3 3 0 0 1-3-1z" fill="#F4E6CF"/>
+    <path d="M7 6v30" stroke="#7E2E36" stroke-width="2"/>
+    <rect x="12" y="8" width="20" height="13" rx="2.5" fill="none" stroke="#F2C877" stroke-width="1.5"/>
+    <text x="22" y="18.5" text-anchor="middle" font-family="Comfortaa, sans-serif" font-weight="700" font-size="9" fill="#F2C877">A–Z</text>
+    <path d="M29 33v6l2.5-1.8L34 39v-6z" fill="#7B4E8E"/></svg>`,
+};
+function dateGroups(list){
+  const now=new Date();
+  const week=new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay()+6)%7)).getTime(); // lundi
+  const month=new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  const groups=[["week","Cette semaine",[]],["month","Ce mois-ci",[]],["old","Plus ancien",[]]];
+  [...list].sort((a,b)=>(b.created||0)-(a.created||0)).forEach(n => {
+    const t=n.created||0; groups[t>=week?0:t>=month?1:2][2].push(n);
+  });
+  const shown=groups;
+  if (!UI.folders) UI.folders={ week:true };
+  const searching=!!UI.q.trim();
+  return shown.map(([k,title,ns]) => { const open=searching || !!UI.folders[k]; return `
+    <section class="folder ${open?"open":""}">
+      <button class="folder-head" data-folder="${k}" aria-expanded="${open}">
+        ${FOLDER_IC[k]}
+        <span class="folder-name">${title}</span><span class="folder-n">${ns.length?plural(ns.length,"note","notes"):"vide"}</span>
+        <svg class="folder-chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+      </button>
+      ${open?`<div class="list folder-body">${ns.map(noteCard).join("") || `<p class="folder-empty">Rien ici pour l'instant.</p>`}</div>`:""}
+    </section>`; }).join("");
+}
 function renderCarnet(){
   const counts = { all:S.notes.length, mot:0, expression:0, phrase:0 };
   S.notes.forEach(n => counts[n.kind] = (counts[n.kind]||0)+1);
@@ -843,10 +896,11 @@ function renderCarnet(){
     <div class="chips" role="group" aria-label="Filtrer">
       ${[["all","Tout"],["mot","Mots"],["expression","Expressions"],["phrase","Phrases"]].map(([k,l])=>`<button class="chip" data-f="${k}" aria-pressed="${UI.filter===k}">${l}<span class="n">${counts[k]||0}</span></button>`).join("")}
     </div>
-    <div class="list">${list.map(noteCard).join("") || emptyState()}</div>`;
+    ${list.length ? dateGroups(list) : (q || UI.filter!=="all") && S.notes.length ? `<div class="list">${emptyState()}</div>` : `${S.notes.length?"":`<div class="list">${emptyState()}</div>`}${dateGroups([])}`}`;
   const qi=$("#q"); qi.addEventListener("input", e => { UI.q=e.target.value; render(); });
   if (hadFocus){ qi.focus(); qi.setSelectionRange(qi.value.length, qi.value.length); }
   app.querySelectorAll("[data-f]").forEach(b => b.addEventListener("click", () => { UI.filter=b.dataset.f; renderCarnet(); }));
+  app.querySelectorAll("[data-folder]").forEach(b => b.addEventListener("click", () => { if (UI.q.trim()) return; const k=b.dataset.folder; UI.folders[k]=!UI.folders[k]; renderCarnet(); }));
   bindNotes(app);
   const ex=$("#addExamples"); if(ex) ex.addEventListener("click", addExamples);
   const nw=$("#addFirst"); if(nw) nw.addEventListener("click", () => openEditor());
