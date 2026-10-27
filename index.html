@@ -256,7 +256,7 @@ body.sparkling .sparkle circle{animation:spark .9s ease-in-out infinite}
 /* note cards — café menu */
 .list{display:flex;flex-direction:column;gap:12px}
 .note{border:1px solid var(--line);border-radius:var(--r);padding:0;width:100%;background:var(--glass);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);box-shadow:var(--shadow);display:flex;align-items:stretch;gap:0}
-.note-main{flex:1 1 auto;min-width:0;border:0;background:none;font:inherit;color:inherit;text-align:left;padding:14px 10px 12px 36px;display:flex;flex-direction:column;gap:6px;cursor:pointer}
+.note-main{flex:1 1 auto;min-width:0;border:0;background:none;font:inherit;color:inherit;text-align:left;padding:14px 10px 14px 36px;display:flex;flex-direction:column;justify-content:center;gap:6px;cursor:pointer;min-height:74px}
 .note-meta{display:flex;align-items:center;gap:10px}
 .note .fr{font-family:var(--f-display);font-weight:700;font-size:1.35rem;line-height:1.2;min-width:0;overflow-wrap:anywhere}
 .note .cups{margin:0}
@@ -453,7 +453,7 @@ mark{background:color-mix(in srgb,var(--gold) 28%,transparent);color:inherit;bor
 (() => {
 "use strict";
 const OFFLINE = true;
-const APP_VERSION = 39;
+const APP_VERSION = 40;
 const CLAUDE_CARNET = "https://claude.ai/artifact/SkJpyQF39EEnoKqUSY5DPX";
 
 /* ---------- helpers ---------- */
@@ -854,12 +854,9 @@ function bindNotes(root){
 }
 const EYE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
 function noteCard(n){
-  const box=n.box||0;
   return `<div class="note">
     <button class="note-main" data-open="${n.id}">
       <span class="fr">${esc(n.french)}${n.example_seed?`<span class="tag-ex">exemple</span>`:""}</span>
-      <span class="note-meta"><span class="kind ${n.kind}">${KIND_LABEL[n.kind]||"Mot"}</span>
-      <span class="cups" aria-label="Niveau ${box} sur 5">${[1,2,3,4,5].map(i=>`<b class="${i<=box?"on":""}"></b>`).join("")}</span></span>
     </button>
     ${n.meaning?`<button class="peek" data-peek="${n.id}" aria-expanded="false" aria-label="Voir le sens de ${esc(n.french)}">
       <span class="peek-in"><span class="peek-front">${EYE}<small>sens</small></span><span class="peek-back">${esc(n.meaning)}</span></span></button>`
