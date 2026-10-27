@@ -431,7 +431,7 @@ mark{background:color-mix(in srgb,var(--gold) 28%,transparent);color:inherit;bor
 (() => {
 "use strict";
 const OFFLINE = true;
-const APP_VERSION = 33;
+const APP_VERSION = 35;
 const CLAUDE_CARNET = "https://claude.ai/artifact/SkJpyQF39EEnoKqUSY5DPX";
 
 /* ---------- helpers ---------- */
@@ -757,12 +757,12 @@ function renderCarnet(){
   const counts = { all:S.notes.length, mot:0, expression:0, phrase:0 };
   S.notes.forEach(n => counts[n.kind] = (counts[n.kind]||0)+1);
   const q = loose(UI.q);
-  const list = S.notes.filter(n => (UI.filter==="all"||n.kind===UI.filter) && (!q || loose([n.french,n.meaning,n.example,n.source].join(" ")).includes(q)));
+  const list = S.notes.filter(n => (UI.filter==="all"||n.kind===UI.filter) && (!q || loose([n.french,n.meaning,n.example].join(" ")).includes(q)));
   const hadFocus = document.activeElement && document.activeElement.id==="q";
   app.innerHTML = `
     <header class="top"><div><h1>Mon carnet</h1><div class="sub">${plural(S.notes.length,"note","notes")} · ${S.notes.filter(isDue).length} à revoir</div></div>${syncBadge()}</header>
     <label class="search"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-      <input id="q" type="search" placeholder="Chercher un mot, une série…" value="${esc(UI.q)}" aria-label="Chercher dans le carnet"></label>
+      <input id="q" type="search" placeholder="Chercher un mot, une expression…" value="${esc(UI.q)}" aria-label="Chercher dans le carnet"></label>
     <div class="chips" role="group" aria-label="Filtrer">
       ${[["all","Tout"],["mot","Mots"],["expression","Expressions"],["phrase","Phrases"]].map(([k,l])=>`<button class="chip" data-f="${k}" aria-pressed="${UI.filter===k}">${l}<span class="n">${counts[k]||0}</span></button>`).join("")}
     </div>
@@ -801,7 +801,7 @@ function addExamples(){
     ["expression","poser un lapin","to stand someone up","Il m'a [posé un lapin] hier soir.","Dix pour cent"],
     ["mot","un défi","a challenge","Apprendre le français est un vrai défi.",""],
   ];
-  ex.forEach(([kind,french,meaning,example,source],i) => saveNote({ id:uid(), kind, french, meaning, example, source, created:base-i, box:0, due:0, example_seed:true }));
+  ex.forEach(([kind,french,meaning,example,source],i) => saveNote({ id:uid(), kind, french, meaning, example, created:base-i, box:0, due:0, example_seed:true }));
   toast("Exemples ajoutés");
 }
 
@@ -839,10 +839,18 @@ const guessKind = t => { const w=t.trim().split(/\s+/).length; return (w>=5 || /
 const fillPrompt = text => `A learner of French (B2-C1) added this to her vocabulary notebook: """${text}"""
 Return JSON only:
 {"kind": "mot" for a single word (with or without article), "expression" for an idiom or fixed phrase, "phrase" for a full sentence,
- "french": the same text, only fixing a clear spelling or accent mistake (otherwise exactly as given),
+ "french": the same text, only fixing a clear spelling or accent mistake. If it is a single NOUN, always put its correct definite article in front: "le" or "la" (e.g. "livre" -> "le livre", "maison" -> "la maison"), "l'" before a vowel or mute h (e.g. "arbre" -> "l'arbre"), and "les" only for nouns used in the plural. Keep an article she already wrote if it is correct, fix it if it is wrong. Never add an article to verbs, adjectives, adverbs, expressions or sentences,
+ "gender": for a noun "masculin" or "feminin", otherwise "",
  "meaning": a short, natural English meaning (for a sentence: its English translation; for a word with several meanings, the most common one, max 2 meanings separated by " / "),
  "example": one natural, everyday French example sentence using it, with the item itself wrapped in [square brackets] exactly where it appears (conjugate or adapt it if needed). For a full sentence, give a different short sentence that reuses its key expression, also bracketed.}`;
-const normFill = (r, text) => ({ kind:["mot","expression","phrase"].includes(r.kind)?r.kind:guessKind(text), french:String(r.french||text).trim(), meaning:String(r.meaning||"").trim(), example:String(r.example||"").trim() });
+const normFill = (r, text) => {
+  const french = String(r.french||text).trim();
+  let meaning = String(r.meaning||"").trim();
+  const g = String(r.gender||"").toLowerCase();
+  if (/^(l['’]|les\s)/i.test(french) && /^(masc|fem|fém)/.test(g) && meaning && !/\((masculin|féminin)\)/.test(meaning))
+    meaning += g.startsWith("masc") ? " (masculin)" : " (féminin)";
+  return { kind:["mot","expression","phrase"].includes(r.kind)?r.kind:guessKind(text), french, meaning, example:String(r.example||"").trim() };
+};
 async function lookupAI(text){
   const r = await askJSON(fillPrompt(text), { model:"claude-haiku-5-5", modelTier:"quick" });
   return normFill(r, text);
@@ -850,7 +858,7 @@ async function lookupAI(text){
 /* phone app: free AI through the person's own Groq relay (Cloudflare Worker) */
 const getRelay = () => { try{ return localStorage.getItem("carnet.relay") || ""; }catch{ return ""; } };
 async function lookupRelay(text){
-  const res = await fetch(getRelay(), { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify({ text }) });
+  const res = await fetch(getRelay(), { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify({ text, prompt: fillPrompt(text) }) });
   let j={}; try{ j = await res.json(); }catch{}
   if (!res.ok || j.error){ const e=new Error("relay"); e.status=res.status; e.groq=String(j.error||""); throw e; }
   return normFill(j, text);
@@ -923,7 +931,7 @@ function groqErr(e){
 }
 
 function openEditor(n, prefill){
-  const isNew=!n; n = n || { kind:"expression", french:prefill||"", meaning:"", example:"", source:"" };
+  const isNew=!n; n = n || { kind:"expression", french:prefill||"", meaning:"", example:"" };
   let kind = isNew && prefill ? guessKind(prefill) : n.kind;
   openSheet(`
     <h2>${isNew?"Nouvelle note":"Modifier la note"}</h2>
@@ -937,7 +945,6 @@ function openEditor(n, prefill){
       <div class="field"><label for="f-mean">Sens</label><input id="f-mean" value="${esc(n.meaning)}" placeholder="ex. to feel down" autocomplete="off"></div>
       <div class="field"><label for="f-ex">Phrase d'exemple</label><textarea id="f-ex" placeholder="Depuis qu'il pleut, j'ai le cafard.">${esc(n.example)}</textarea>
         <span class="hint">Les mots entre [crochets] seront cachés dans le texte à trous.</span></div>
-      <div class="field"><label for="f-src">Où je l'ai trouvé</label><input id="f-src" value="${esc(n.source)}" placeholder="Série, épisode, livre, leçon…" autocomplete="off"></div>
       <div class="btnrow"><button type="button" class="btn ghost" id="cancel">Annuler</button><button class="btn primary" type="submit">${isNew?"Ajouter au carnet":"Enregistrer"}</button></div>
     </form>`, s => {
       const setKind = k => { kind=k; s.querySelectorAll("[data-k]").forEach(x=>x.setAttribute("aria-pressed", x.dataset.k===k)); };
@@ -969,7 +976,8 @@ function openEditor(n, prefill){
       $("#ed",s).addEventListener("submit", e => {
         e.preventDefault();
         const french=fr.value.trim(); if(!french) return;
-        const out = { ...n, kind, french, meaning:mean.value.trim(), example:ex.value.trim(), source:$("#f-src",s).value.trim() };
+        const out = { ...n, kind, french, meaning:mean.value.trim(), example:ex.value.trim() };
+        delete out.source;
         if (isNew){ out.id=uid(); out.created=Date.now(); out.box=0; out.due=0; }
         if (french!==n.french) delete out.ai;
         delete out.example_seed;
@@ -997,7 +1005,7 @@ function openDetail(id){
     <div class="detail-fr" style="margin-top:12px">${esc(n.french)}</div>
     ${n.meaning?`<div class="detail-mean">${esc(n.meaning)}</div>`:""}
     ${n.example?`<div class="detail-ex">${esc(clean(n.example))}</div>`:""}
-    <div class="meta-line">${n.source?`Trouvé dans : ${esc(n.source)} · `:""}Niveau ${n.box||0}/5${n.seen?` · revu ${n.seen} fois`:""}</div>
+    <div class="meta-line">Niveau ${n.box||0}/5${n.seen?` · revu ${n.seen} fois`:""}</div>
     <div class="section-label">En vidéo</div>
     ${videoLinks(n.french)}
     ${showAI?`<div class="section-label">En contexte</div><div id="aiZone">${aiContextHTML(n)}</div>`:""}
