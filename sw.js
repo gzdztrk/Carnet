@@ -1,6 +1,6 @@
 // Mon Carnet de Français: keeps the app working offline.
 // Change VERSION whenever you upload a new index.html, so phones pick up the update.
-const VERSION = "carnet-v35";
+const VERSION = "carnet-v36";
 const APP_FILES = ["./", "./index.html", "./manifest.webmanifest", "./apple-touch-icon.png", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", (event) => {

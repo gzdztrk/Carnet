@@ -431,7 +431,7 @@ mark{background:color-mix(in srgb,var(--gold) 28%,transparent);color:inherit;bor
 (() => {
 "use strict";
 const OFFLINE = true;
-const APP_VERSION = 35;
+const APP_VERSION = 36;
 const CLAUDE_CARNET = "https://claude.ai/artifact/SkJpyQF39EEnoKqUSY5DPX";
 
 /* ---------- helpers ---------- */
@@ -455,7 +455,26 @@ function toast(msg){ const t=document.createElement("div"); t.className="toast";
 const TTS = { ok: "speechSynthesis" in window, voice:null };
 function pickVoice(){ try{ const vs=speechSynthesis.getVoices(); TTS.voice = vs.find(v=>/^fr(-|_)FR/i.test(v.lang)) || vs.find(v=>/^fr/i.test(v.lang)) || null; }catch{} }
 if (TTS.ok){ pickVoice(); try{ speechSynthesis.onvoiceschanged = pickVoice; }catch{} }
-function speak(text, rate=0.92){ if(!TTS.ok) return; try{ speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(clean(text)); u.lang="fr-FR"; u.rate=rate; if(TTS.voice) u.voice=TTS.voice; speechSynthesis.speak(u);}catch{} }
+/* iPhone silent mode: make the voice count as media (like music), which plays even when the phone is on silent */
+const MEDIA = { el:null, url:null };
+function silentWavURL(){
+  if (MEDIA.url) return MEDIA.url;
+  const rate=8000, n=rate/4, buf=new ArrayBuffer(44+n*2), v=new DataView(buf);
+  const w=(o,str)=>{ for(let i=0;i<str.length;i++) v.setUint8(o+i,str.charCodeAt(i)); };
+  w(0,"RIFF"); v.setUint32(4,36+n*2,true); w(8,"WAVE"); w(12,"fmt "); v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true);
+  v.setUint32(24,rate,true); v.setUint32(28,rate*2,true); v.setUint16(32,2,true); v.setUint16(34,16,true); w(36,"data"); v.setUint32(40,n*2,true);
+  try{ MEDIA.url = URL.createObjectURL(new Blob([buf],{type:"audio/wav"})); }catch{ MEDIA.url = ""; }
+  return MEDIA.url;
+}
+function mediaMode(){
+  try{ if (navigator.audioSession) navigator.audioSession.type = "playback"; }catch{}
+  try{
+    if (!MEDIA.el){ MEDIA.el = new Audio(); MEDIA.el.setAttribute("playsinline",""); MEDIA.el.preload="auto"; MEDIA.el.src = silentWavURL(); }
+    MEDIA.el.currentTime = 0; const p = MEDIA.el.play(); if (p && p.catch) p.catch(()=>{});
+  }catch{}
+}
+["pointerdown","touchend","keydown"].forEach(ev => document.addEventListener(ev, mediaMode, { capture:true, passive:true }));
+function speak(text, rate=0.92){ if(!TTS.ok) return; mediaMode(); try{ speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(clean(text)); u.lang="fr-FR"; u.rate=rate; if(TTS.voice) u.voice=TTS.voice; speechSynthesis.speak(u);}catch{} }
 
 /* ---------- stockage ---------- */
 const KEYS = OFFLINE ? { notes:"carnet.notes", meta:"carnet.meta" } : { notes:"carnet.cache.notes", meta:"carnet.cache.meta" };
@@ -1436,7 +1455,7 @@ Return JSON only: {"title": short French title, "place": one of "cafe","metro","
     const doneTalking = () => { if(my!==token) return; ws.forEach(w=>w.classList.add("on")); setTalk(null); timers.push(setTimeout(()=>{ if(my===token && !paused) showLine(i+1); }, 1100)); };
     if(TTS.ok){
       try{
-        const u=new SpeechSynthesisUtterance(l.fr); u.lang="fr-FR"; u.rate=0.95;
+        mediaMode(); const u=new SpeechSynthesisUtterance(l.fr); u.lang="fr-FR"; u.rate=0.95;
         u.pitch = who==="a" ? (A.look==="woman"?1.2:0.95) : (B.look==="woman"?1.2:0.85);
         if(TTS.voice) u.voice=TTS.voice;
         let ended=false; u.onend=()=>{ if(!ended){ ended=true; doneTalking(); } };
