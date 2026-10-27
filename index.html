@@ -292,10 +292,21 @@ body.sparkling .sparkle circle{animation:spark .9s ease-in-out infinite}
 .tab.add .dot svg{width:24px;height:24px}
 
 /* sheets */
-.scrim{position:fixed;inset:0;background:rgba(15,20,15,.5);z-index:40;display:flex;align-items:flex-end;justify-content:center}
-.sheet{background:var(--bg);width:100%;max-width:640px;max-height:92%;overflow:auto;border-radius:24px 24px 0 0;
-  padding-left:max(18px,env(safe-area-inset-left,0px));padding-right:max(18px,env(safe-area-inset-right,0px));padding-block:10px calc(24px + env(safe-area-inset-bottom,0px));animation:up .22s ease-out}
-@keyframes up{from{transform:translateY(30px);opacity:.4}to{transform:none;opacity:1}}
+.scrim{position:fixed;inset:0;background:rgba(15,20,15,.5);z-index:40;display:flex;align-items:flex-end;justify-content:center;animation:fadeIn .2s ease-out}
+.scrim.closing{animation:fadeOut .2s ease-in forwards}
+.sheet{background:var(--bg);width:100%;max-width:640px;max-height:92%;overflow:auto;overscroll-behavior:contain;border-radius:24px 24px 0 0;position:relative;
+  padding-left:max(18px,env(safe-area-inset-left,0px));padding-right:max(18px,env(safe-area-inset-right,0px));padding-block:0 calc(24px + env(safe-area-inset-bottom,0px));animation:up .26s cubic-bezier(.2,.8,.2,1)}
+.scrim.closing .sheet{animation:down .2s ease-in forwards}
+.sheet.dragging{animation:none;transition:none}
+.sheet.snap{transition:transform .22s cubic-bezier(.2,.8,.2,1)}
+@keyframes up{from{transform:translateY(100%)}to{transform:none}}
+@keyframes down{from{transform:var(--drag,translateY(0))}to{transform:translateY(100%)}}
+@keyframes fadeIn{from{background:rgba(15,20,15,0)}to{background:rgba(15,20,15,.5)}}
+@keyframes fadeOut{from{background:rgba(15,20,15,.5)}to{background:rgba(15,20,15,0)}}
+.sheet-bar{position:sticky;top:0;z-index:3;display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 calc(-1 * max(18px,env(safe-area-inset-left,0px))) 6px;padding:8px max(10px,env(safe-area-inset-left,0px)) 6px;background:var(--bg);touch-action:none}
+.sheet-bar .grab{position:absolute;left:50%;top:8px;transform:translateX(-50%);margin:0}
+.sheet-back{border:0;background:var(--chip);color:var(--text);font-weight:700;font-size:1rem;border-radius:999px;padding:8px 16px 8px 12px;min-height:40px;display:inline-flex;align-items:center;gap:4px;margin-top:10px}
+.sheet-x{border:0;background:var(--chip);color:var(--text);width:40px;height:40px;border-radius:50%;font-size:1.1rem;display:grid;place-items:center;margin-top:10px}
 .grab{width:44px;height:5px;border-radius:3px;background:var(--line);margin:0 auto 12px}
 .sheet h2{font-family:var(--f-display);font-weight:700;margin:4px 0 16px;font-size:1.6rem}
 .field{display:flex;flex-direction:column;gap:7px;margin-bottom:16px}
@@ -431,7 +442,7 @@ mark{background:color-mix(in srgb,var(--gold) 28%,transparent);color:inherit;bor
 (() => {
 "use strict";
 const OFFLINE = true;
-const APP_VERSION = 37;
+const APP_VERSION = 38;
 const CLAUDE_CARNET = "https://claude.ai/artifact/SkJpyQF39EEnoKqUSY5DPX";
 
 /* ---------- helpers ---------- */
@@ -870,15 +881,59 @@ function renderGames(){
 }
 
 /* ---------- fenêtres ---------- */
+/* ---------- panneaux (bottom sheets) : retour, glisser vers le bas, geste retour ---------- */
+const SHEET = { hist:false, ignorePop:false };
+function removeSheetNow(){ const s=$("#scrim"); if(s) s.remove(); document.body.style.overflow=""; }
 function openSheet(html, onMount){
-  closeSheet();
+  const had = !!$("#scrim");
+  removeSheetNow();
   const s=document.createElement("div"); s.className="scrim"; s.id="scrim";
-  s.innerHTML=`<div class="sheet" role="dialog" aria-modal="true"><div class="grab"></div>${html}</div>`;
+  if (had) s.style.animation="none";
+  s.innerHTML=`<div class="sheet" role="dialog" aria-modal="true">
+    <div class="sheet-bar"><button class="sheet-back" type="button" aria-label="Retour">‹ Retour</button><span class="grab" aria-hidden="true"></span><button class="sheet-x" type="button" aria-label="Fermer">✕</button></div>
+    ${html}</div>`;
+  const sheet=$(".sheet",s);
+  if (had) sheet.style.animation="none";
   s.addEventListener("click", e => { if(e.target===s) closeSheet(); });
+  $(".sheet-back",s).addEventListener("click", () => closeSheet());
+  $(".sheet-x",s).addEventListener("click", () => closeSheet());
+  // swipe down to close
+  let y0=null, dy=0, fromBar=false;
+  sheet.addEventListener("touchstart", e => {
+    fromBar = !!e.target.closest(".sheet-bar");
+    if (!fromBar && sheet.scrollTop>0) { y0=null; return; }
+    if (e.target.closest("input,textarea,select")) { y0=null; return; }
+    y0=e.touches[0].clientY; dy=0; sheet.classList.remove("snap");
+  }, { passive:true });
+  sheet.addEventListener("touchmove", e => {
+    if (y0===null) return;
+    dy = e.touches[0].clientY - y0;
+    if (dy<=0){ sheet.style.transform=""; return; }
+    if (!fromBar && sheet.scrollTop>0){ y0=null; sheet.style.transform=""; return; }
+    sheet.classList.add("dragging"); sheet.style.transform=`translateY(${dy}px)`;
+    if (e.cancelable && dy>6) e.preventDefault();
+  }, { passive:false });
+  sheet.addEventListener("touchend", () => {
+    if (y0===null) return; y0=null; sheet.classList.remove("dragging");
+    if (dy>90){ sheet.style.setProperty("--drag",`translateY(${dy}px)`); closeSheet(); }
+    else { sheet.classList.add("snap"); sheet.style.transform=""; }
+  });
   document.body.appendChild(s); document.body.style.overflow="hidden";
+  if (OFFLINE && !SHEET.hist){ try{ history.pushState({ carnetSheet:1 }, ""); SHEET.hist=true; }catch{} }
   onMount && onMount(s);
 }
-function closeSheet(){ const s=$("#scrim"); if(s) s.remove(); document.body.style.overflow=""; }
+function closeSheet(){
+  const s=$("#scrim"); if(!s || s.classList.contains("closing")) return;
+  if (SHEET.hist){ SHEET.hist=false; SHEET.ignorePop=true; try{ history.back(); }catch{ SHEET.ignorePop=false; } }
+  const reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduce){ removeSheetNow(); return; }
+  s.classList.add("closing");
+  setTimeout(() => { if (s.isConnected) s.remove(); if(!$("#scrim")) document.body.style.overflow=""; }, 210);
+}
+window.addEventListener("popstate", () => {
+  if (SHEET.ignorePop){ SHEET.ignorePop=false; return; }
+  if ($("#scrim")){ SHEET.hist=false; closeSheet(); }
+});
 document.addEventListener("keydown", e => { if(e.key==="Escape") closeSheet(); });
 
 /* ---------- remplissage automatique : sens + exemple ---------- */
