@@ -14,7 +14,7 @@
 <link rel="icon" href="icon-192.png">
 <title>Mon Carnet de Français</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kalam:wght@400;700&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@400;600;700&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
 <style>
 /* Layout: Paris at golden hour, kept like a notebook — each screen has its own drawn street (landmark, shops, a living sky)
    fixed behind the page; boxes are softly see-through pages with notebook lines; one calm column */
@@ -27,9 +27,9 @@
   --rule:rgba(123,78,142,.16); --margin:rgba(214,84,92,.45); --ribbon:#B23A48;
   --shop-wall:#E6CFC6; --shop-sign:#6B4A57; --shop-cream:#FFF6EA; --shop-green:#3E7A5E; --shop-red:#B5474F; --shop-blue:#4467A8; --shop-glass:#FFF0D2; --shop-door:#6B4A57;
   --cloud:#FFFFFF; --cloud-btn:#FFFBF7; --cloud-btn-2:#FBEFF3;
-  --f-display:"Kalam","Bradley Hand","Segoe Print",cursive;
+  --f-display:"Comfortaa","Varela Round","Trebuchet MS",sans-serif;
   --f-body:"Atkinson Hyperlegible",-apple-system,"Segoe UI",Roboto,sans-serif;
-  --f-hand:"Kalam","Bradley Hand","Segoe Print",cursive;
+  --f-hand:"Comfortaa","Varela Round","Trebuchet MS",sans-serif;
   --r:18px;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
@@ -230,6 +230,13 @@ body.sparkling .sparkle circle{animation:spark .9s ease-in-out infinite}
 .tab.add .dot.croissant svg{width:46px;height:30px;filter:drop-shadow(0 1.5px 1.5px rgba(90,50,20,.25))}
 .tab.add .dot.croissant .plus{position:absolute;right:-6px;top:-8px;width:18px;height:18px;border-radius:50%;background:var(--accent);color:var(--on-accent);font-weight:700;font-size:14px;line-height:18px;text-align:center;font-family:var(--f-body)}
 .tab.add:active .dot.croissant{transform:scale(.94)}
+
+/* Comfortaa sizing */
+.q-hand{font-size:1.3rem!important;line-height:1.45!important}
+.note .ex,.detail-ex{font-size:1.15rem!important;line-height:1.45!important}
+.ai-ex .fr{font-size:1.1rem!important}
+.pc-t{font-size:.95rem!important;font-weight:700}
+.answer-in[style*="f-hand"]{font-size:1.15rem!important}
 
 /* game cards */
 .plaques{display:grid;grid-template-columns:1fr 1fr;gap:12px}
@@ -453,7 +460,7 @@ mark{background:color-mix(in srgb,var(--gold) 28%,transparent);color:inherit;bor
 (() => {
 "use strict";
 const OFFLINE = true;
-const APP_VERSION = 40;
+const APP_VERSION = 41;
 const CLAUDE_CARNET = "https://claude.ai/artifact/SkJpyQF39EEnoKqUSY5DPX";
 
 /* ---------- helpers ---------- */
