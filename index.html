@@ -431,7 +431,7 @@ mark{background:color-mix(in srgb,var(--gold) 28%,transparent);color:inherit;bor
 (() => {
 "use strict";
 const OFFLINE = true;
-const APP_VERSION = 36;
+const APP_VERSION = 37;
 const CLAUDE_CARNET = "https://claude.ai/artifact/SkJpyQF39EEnoKqUSY5DPX";
 
 /* ---------- helpers ---------- */
@@ -474,7 +474,36 @@ function mediaMode(){
   }catch{}
 }
 ["pointerdown","touchend","keydown"].forEach(ev => document.addEventListener(ev, mediaMode, { capture:true, passive:true }));
-function speak(text, rate=0.92){ if(!TTS.ok) return; mediaMode(); try{ speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(clean(text)); u.lang="fr-FR"; u.rate=rate; if(TTS.voice) u.voice=TTS.voice; speechSynthesis.speak(u);}catch{} }
+/* real audio from the relay (phone app): always plays, even in silent mode */
+const VOICE = { el:null, token:0 };
+const relayVoice = () => { if (!OFFLINE) return ""; try{ const r=localStorage.getItem("carnet.relay")||""; return r ? r.replace(/\/+$/,"") + "/tts?text=" : ""; }catch{ return ""; } };
+function stopVoice(){ VOICE.token++; try{ if (VOICE.el){ VOICE.el.onended=null; VOICE.el.onerror=null; VOICE.el.pause(); } }catch{} try{ speechSynthesis.cancel(); }catch{} }
+function sayBuiltIn(text, rate, onEnd, pitch){
+  if(!TTS.ok){ onEnd && onEnd(false); return; }
+  mediaMode();
+  try{ speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(clean(text)); u.lang="fr-FR"; u.rate=rate; if(pitch) u.pitch=pitch; if(TTS.voice) u.voice=TTS.voice;
+    let done=false; const fin=()=>{ if(!done){ done=true; onEnd && onEnd(true); } }; u.onend=fin; u.onerror=fin; speechSynthesis.speak(u); }
+  catch{ onEnd && onEnd(false); }
+}
+function say(text, { rate=0.92, onEnd=null, pitch=0 } = {}){
+  const t = clean(text).trim(); if (!t){ onEnd && onEnd(false); return; }
+  stopVoice(); const my = VOICE.token;
+  const base = relayVoice();
+  if (!base){ sayBuiltIn(t, rate, onEnd, pitch); return; }
+  try{
+    if (!VOICE.el){ VOICE.el = new Audio(); VOICE.el.setAttribute("playsinline",""); VOICE.el.preload="auto"; }
+    const el = VOICE.el;
+    let fellBack = false;
+    const fallback = () => { if (fellBack || my!==VOICE.token) return; fellBack = true; sayBuiltIn(t, rate, onEnd, pitch); };
+    el.onended = () => { if (my===VOICE.token) onEnd && onEnd(true); };
+    el.onerror = fallback;
+    el.src = base + encodeURIComponent(t);
+    el.playbackRate = Math.max(0.5, Math.min(1.5, rate/0.92));
+    const p = el.play(); if (p && p.catch) p.catch(fallback);
+  }catch{ sayBuiltIn(t, rate, onEnd, pitch); }
+}
+const canSpeak = () => TTS.ok || !!relayVoice();
+function speak(text, rate=0.92){ say(text, { rate }); }
 
 /* ---------- stockage ---------- */
 const KEYS = OFFLINE ? { notes:"carnet.notes", meta:"carnet.meta" } : { notes:"carnet.cache.notes", meta:"carnet.cache.meta" };
@@ -724,7 +753,7 @@ function gameList(){
   return [
     { k:"flash", t:"Cartes", d:"Retourne la carte : français ↔ sens", off: total<1 },
     { k:"cloze", t:"Texte à trous", d:"Complète tes propres phrases", off: total<1 },
-    { k:"listen", t:"Dictée", d:"Écoute, puis écris", off: total<1 || !TTS.ok },
+    { k:"listen", t:"Dictée", d:"Écoute, puis écris", off: total<1 || !canSpeak() },
     { k:"match", t:"Associer", d:"Relie 5 notes à leur sens, chrono en main", off: withMeaning<3 },
     { k:"write", t:"À toi d'écrire", d:"Écris ta phrase, reçois une correction légère", ai:true, off: total<1 || (!S.ai && !OFFLINE) },
     { k:"scene", t:"Mini-scène", d:"Une petite scène animée avec tes notes", ai:true, off: total<2 || (!S.ai && !OFFLINE) },
@@ -1020,7 +1049,7 @@ function openDetail(id){
   const showAI = !OFFLINE || n.ai;
   openSheet(`
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><span class="kind ${n.kind}">${KIND_LABEL[n.kind]||"Mot"}</span>
-      ${TTS.ok?`<button class="btn ghost" id="say" style="min-height:44px">🔊 Écouter</button>`:""}</div>
+      ${canSpeak()?`<button class="btn ghost" id="say" style="min-height:44px">🔊 Écouter</button>`:""}</div>
     <div class="detail-fr" style="margin-top:12px">${esc(n.french)}</div>
     ${n.meaning?`<div class="detail-mean">${esc(n.meaning)}</div>`:""}
     ${n.example?`<div class="detail-ex">${esc(clean(n.example))}</div>`:""}
@@ -1048,7 +1077,7 @@ function aiContextHTML(n){
       ${a.register?`<div><span class="pill">${esc(a.register)}</span></div>`:""}
       ${a.usage?`<div>${esc(a.usage)}</div>`:""}
       ${(a.examples||[]).map(x=>`<div class="ai-ex"><div class="fr">${hl(x.fr, n.french)}</div><div class="en">${esc(x.en)}</div></div>`).join("")}
-      ${TTS.ok?`<button class="btn ghost" id="sayEx">🔊 Écouter les exemples</button>`:""}</div>`; }
+      ${canSpeak()?`<button class="btn ghost" id="sayEx">🔊 Écouter les exemples</button>`:""}</div>`; }
   if (!S.ai) return `<div class="ai-box"><div style="color:var(--muted)">Autorise l'aide de l'IA pour voir des exemples d'utilisation.</div></div>`;
   return `<button class="btn block" id="getAI">✦ Comment l'utiliser ?</button>`;
 }
@@ -1197,13 +1226,13 @@ function startSession(mode){
   UI.session={ kind:"cards", items, i:0, right:0 };
   window.scrollTo(0,0); render(); renderStep();
 }
-function mixMode(){ const m=["flash","flash","cloze","cloze"]; if(TTS.ok) m.push("listen","listen"); if(S.ai) m.push("write"); return m[Math.floor(Math.random()*m.length)]; }
+function mixMode(){ const m=["flash","flash","cloze","cloze"]; if(canSpeak()) m.push("listen","listen"); if(S.ai) m.push("write"); return m[Math.floor(Math.random()*m.length)]; }
 function sessFrame(inner){
   const s=UI.session, n=s.items.length;
   app.innerHTML=`<div class="sess-top"><button class="x" id="quit" aria-label="Arrêter">✕</button><div class="bar"><i style="width:${n?Math.round(s.i/n*100):0}%"></i></div><span class="count">${Math.min(s.i+1,n)}/${n}</span></div>${inner}`;
   $("#quit").addEventListener("click", endSession);
 }
-function endSession(){ UI.session=null; if(TTS.ok) try{speechSynthesis.cancel()}catch{} render(); window.scrollTo(0,0); }
+function endSession(){ UI.session=null; stopVoice(); render(); window.scrollTo(0,0); }
 function next(correct){
   const s=UI.session; const n=S.notes.find(x=>x.id===s.items[s.i].id);
   if(n && correct!==null) grade(n, correct);
@@ -1244,10 +1273,10 @@ function stepFlash(n){
     ${!reverse && n.example?`<div class="q-hand" style="opacity:.8">${esc(clean(n.example))}</div>`:""}
     <div id="backside"></div></div>
     <div style="margin-top:14px" id="ctrl"><button class="btn primary block" id="flip">Retourner la carte</button></div>`);
-  if(!reverse && TTS.ok) speak(n.french);
+  if(!reverse && canSpeak()) speak(n.french);
   $("#flip").addEventListener("click", () => {
     $("#backside").innerHTML = revealBlock(n);
-    if(reverse && TTS.ok) speak(n.french);
+    if(reverse && canSpeak()) speak(n.french);
     $("#ctrl").innerHTML=`<div class="btnrow"><button class="btn danger" id="no">Je ne savais pas</button><button class="btn good" id="yes">Je savais ✓</button></div>`;
     $("#no").addEventListener("click", () => next(false));
     $("#yes").addEventListener("click", () => next(true));
@@ -1273,7 +1302,7 @@ function bindAnswer(n, expected){
   const done = (res) => {
     const msg = res==="ok" ? `<b>Exact !</b>` : res==="close" ? `<b>Presque !</b> Attention aux accents : <b>${esc(expected)}</b>` : `<b>Pas tout à fait.</b> La réponse : <b>${esc(expected)}</b>`;
     $("#fb").innerHTML = `<div class="feedback ${res}">${msg}</div>${revealBlock(n)}<div style="margin-top:12px"><button class="btn primary block" id="go">Continuer</button></div>`;
-    $("#af").remove(); if(TTS.ok) speak(n.french);
+    $("#af").remove(); if(canSpeak()) speak(n.french);
     $("#go").addEventListener("click", () => next(res!=="no")); $("#go").focus();
   };
   $("#af").addEventListener("submit", e => { e.preventDefault(); const v=$("#ans").value; if(!v.trim()) return; done(checkAnswer(v, expected)); });
@@ -1294,7 +1323,7 @@ function stepCloze(n){
   } else return stepFlash(n);
 }
 function stepListen(n){
-  if(!TTS.ok) return stepFlash(n);
+  if(!canSpeak()) return stepFlash(n);
   const text = n.french;
   sessFrame(`<div class="card"><div class="q-label">Dictée · écoute et écris</div>
     <button class="speak" id="play" aria-label="Écouter">${icon("listen")}</button>
@@ -1355,7 +1384,7 @@ function startMatch(){
   $("#quit").addEventListener("click", ()=>{ clearInterval(iv); endSession(); });
   app.querySelectorAll(".tile").forEach(b => b.addEventListener("click", () => {
     if(b.classList.contains("gone")) return;
-    if(b.dataset.side==="fr" && TTS.ok) speak(b.textContent);
+    if(b.dataset.side==="fr" && canSpeak()) speak(b.textContent);
     if(!sel || sel.dataset.side===b.dataset.side){ if(sel) sel.classList.remove("sel"); sel=b; b.classList.add("sel"); return; }
     if(sel.dataset.id===b.dataset.id){
       [sel,b].forEach(x=>{x.classList.remove("sel");x.classList.add("gone");}); found++; sel=null;
@@ -1402,7 +1431,7 @@ async function startScene(){
   const pool=pickNotes(3);
   UI.session={ kind:"scene" }; render(); window.scrollTo(0,0);
   let alive=true, timers=[], token=0;
-  const stopAll = () => { token++; timers.forEach(clearTimeout); timers=[]; if(TTS.ok) try{speechSynthesis.cancel()}catch{} };
+  const stopAll = () => { token++; timers.forEach(clearTimeout); timers=[]; stopVoice(); };
   const frame = inner => { app.innerHTML=`<div class="sess-top"><button class="x" id="quit" aria-label="Arrêter">✕</button><div style="flex:1;font-family:var(--f-display);font-weight:700;font-size:1.3rem">Mini-scène</div></div>${inner}`;
     $("#quit").addEventListener("click", () => { alive=false; stopAll(); endSession(); }); };
   frame(`<div class="loading"><div class="spinner"></div>Je prépare une scène avec : ${pool.map(n=>esc(n.french)).join(", ")}…</div>`);
@@ -1453,15 +1482,10 @@ Return JSON only: {"title": short French title, "place": one of "cafe","metro","
     const per=Math.max(170, Math.min(320, 2600/Math.max(1,ws.length)));
     ws.forEach((w,k)=>timers.push(setTimeout(()=>{ if(my===token) w.classList.add("on"); }, k*per)));
     const doneTalking = () => { if(my!==token) return; ws.forEach(w=>w.classList.add("on")); setTalk(null); timers.push(setTimeout(()=>{ if(my===token && !paused) showLine(i+1); }, 1100)); };
-    if(TTS.ok){
-      try{
-        mediaMode(); const u=new SpeechSynthesisUtterance(l.fr); u.lang="fr-FR"; u.rate=0.95;
-        u.pitch = who==="a" ? (A.look==="woman"?1.2:0.95) : (B.look==="woman"?1.2:0.85);
-        if(TTS.voice) u.voice=TTS.voice;
-        let ended=false; u.onend=()=>{ if(!ended){ ended=true; doneTalking(); } };
-        speechSynthesis.speak(u);
-        timers.push(setTimeout(()=>{ if(!ended){ ended=true; doneTalking(); } }, ws.length*650+3000));
-      }catch{ timers.push(setTimeout(doneTalking, ws.length*per+900)); }
+    if(canSpeak()){
+      let ended=false; const fin=()=>{ if(!ended){ ended=true; doneTalking(); } };
+      say(l.fr, { rate:0.95, onEnd:fin, pitch: who==="a" ? (A.look==="woman"?1.2:0.95) : (B.look==="woman"?1.2:0.85) });
+      timers.push(setTimeout(fin, ws.length*650+4000));
     } else timers.push(setTimeout(doneTalking, ws.length*per+900));
   }
   function finish(){
