@@ -262,17 +262,18 @@ body.sparkling .sparkle circle{animation:spark .9s ease-in-out infinite}
 
 /* note cards — café menu */
 .list{display:flex;flex-direction:column;gap:12px}
-.folder{margin-top:14px}
-.folder-head{width:100%;display:flex;align-items:center;gap:12px;padding:14px 16px;min-height:64px;border:1px solid var(--line);border-radius:18px;background:var(--glass);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);box-shadow:var(--shadow);font:inherit;color:var(--text);text-align:left}
+.folder{margin-top:10px}
+.folder-head{width:100%;display:flex;align-items:center;gap:12px;padding:8px 14px;min-height:58px;border:1px solid var(--line);border-radius:18px;background:var(--glass);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);box-shadow:var(--shadow);font:inherit;color:var(--text);text-align:left}
 .folder-ic{width:50px;height:45px;flex:none;overflow:visible}
 .folder-name{font-family:var(--f-display);font-weight:700;font-size:1.1rem;flex:1}
 .folder-n{font-size:.85rem;color:var(--muted);font-weight:700}
 .folder-chev{color:var(--muted);transition:transform .2s}
 .folder.open .folder-chev{transform:rotate(90deg)}
-.sec-head{display:flex;align-items:center;justify-content:space-between;margin:22px 2px 0}
+.sec-head{display:flex;align-items:center;justify-content:space-between;margin:18px 2px 0}
+.sec-head.first{margin-top:12px}
 .sec-head h2{font-family:var(--f-display);font-weight:700;font-size:1.15rem;margin:0}
-.date-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}
-.date-tile{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:12px 6px 10px;min-height:104px;border:1px solid var(--line);border-radius:18px;background:var(--glass);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);box-shadow:var(--shadow);font:inherit;color:var(--text);text-align:center}
+.date-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:10px}
+.date-tile{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:12px 6px 10px;min-height:92px;border:1px solid var(--line);border-radius:18px;background:var(--glass);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);box-shadow:var(--shadow);font:inherit;color:var(--text);text-align:center}
 .date-tile .folder-ic{width:44px;height:40px}
 .date-tile .dt-name{font-family:var(--f-display);font-weight:700;font-size:.9rem;line-height:1.15}
 .date-tile .dt-n{font-size:.78rem;color:var(--muted);font-weight:700}
@@ -495,7 +496,7 @@ mark{background:color-mix(in srgb,var(--gold) 28%,transparent);color:inherit;bor
 (() => {
 "use strict";
 const OFFLINE = true;
-const APP_VERSION = 49;
+const APP_VERSION = 50;
 const CLAUDE_CARNET = "https://claude.ai/artifact/SkJpyQF39EEnoKqUSY5DPX";
 
 /* ---------- helpers ---------- */
@@ -951,7 +952,7 @@ function myCarnetFolders(list){
       <button class="mv" data-mv="${i}" data-d="-1" aria-label="Monter ${esc(c.name)}" ${i===0?"disabled":""}>▲</button>
       <button class="mv" data-mv="${i}" data-d="1" aria-label="Descendre ${esc(c.name)}" ${i===cs.length-1?"disabled":""}>▼</button>
     </div>`).join("")}
-    <div class="sec-head"><h2>Par date</h2></div>`;
+`;
   const items=cs.map(c => {
     const ns=list.filter(n=>n.carnet===c.id), k="c:"+c.id, open=!!UI.folders[k];
     return `<section class="folder ${open?"open":""}">
@@ -964,7 +965,7 @@ function myCarnetFolders(list){
     </section>`; }).join("");
   return `<div class="sec-head"><h2>Mes carnets</h2><span class="sec-btns">${cs.length>1?`<button class="chip sort-btn" id="sortCarnets">⇅ Ranger</button>`:""}<button class="chip new-carnet" id="newCarnet">＋ Nouveau</button></span></div>
     ${items || `<button class="folder-new" id="newCarnet2">${notebookIc("#B9A7B1")}<span><strong>Crée ton premier carnet</strong><small>ex. « Lupin, saison 1 », « Leçon 5 », « Au travail »</small></span></button>`}
-    <div class="sec-head"><h2>Par date</h2></div>`;
+`;
 }
 function dateGroups(list){
   const now=new Date();
@@ -978,7 +979,7 @@ function dateGroups(list){
   if (!UI.folders) UI.folders={ week:true };
   const searching=!!UI.q.trim();
   if (!searching){
-    if (UI.dateOpen===undefined) UI.dateOpen="week";
+    if (UI.dateOpen===undefined) UI.dateOpen=null;
     const cur=shown.find(g=>g[0]===UI.dateOpen);
     return `<div class="date-row">${shown.map(([k,title,ns]) => `
       <button class="date-tile ${UI.dateOpen===k?"on":""}" data-date="${k}" aria-expanded="${UI.dateOpen===k}">
@@ -1009,8 +1010,8 @@ function renderCarnet(){
     <div class="chips" role="group" aria-label="Filtrer">
       ${[["all","Tout"],["mot","Mots"],["expression","Expressions"],["phrase","Phrases"]].map(([k,l])=>`<button class="chip" data-f="${k}" aria-pressed="${UI.filter===k}">${l}<span class="n">${counts[k]||0}</span></button>`).join("")}
     </div>
-    ${!q ? myCarnetFolders(list) : ""}
-    ${list.length ? dateGroups(list) : (q || UI.filter!=="all") && S.notes.length ? `<div class="list">${emptyState()}</div>` : `${S.notes.length?"":`<div class="list">${emptyState()}</div>`}${dateGroups([])}`}`;
+    ${list.length ? `${q?"":`<div class="sec-head first"><h2>Par date</h2></div>`}${dateGroups(list)}` : (q || UI.filter!=="all") && S.notes.length ? `<div class="list">${emptyState()}</div>` : `${S.notes.length?"":`<div class="list">${emptyState()}</div>`}<div class="sec-head first"><h2>Par date</h2></div>${dateGroups([])}`}
+    ${!q ? myCarnetFolders(list) : ""}`;
   const qi=$("#q"); qi.addEventListener("input", e => { UI.q=e.target.value; render(); });
   if (hadFocus){ qi.focus(); qi.setSelectionRange(qi.value.length, qi.value.length); }
   app.querySelectorAll("[data-f]").forEach(b => b.addEventListener("click", () => { UI.filter=b.dataset.f; renderCarnet(); }));
