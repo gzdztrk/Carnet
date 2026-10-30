@@ -269,6 +269,19 @@ body.sparkling .sparkle circle{animation:spark .9s ease-in-out infinite}
 .folder-n{font-size:.85rem;color:var(--muted);font-weight:700}
 .folder-chev{color:var(--muted);transition:transform .2s}
 .folder.open .folder-chev{transform:rotate(90deg)}
+.sec-head{display:flex;align-items:center;justify-content:space-between;margin:22px 2px 0}
+.sec-head h2{font-family:var(--f-display);font-weight:700;font-size:1.15rem;margin:0}
+.new-carnet{background:var(--shop-glass);color:var(--shop-sign);border:0;font-weight:700}
+.folder-new{width:100%;display:flex;align-items:center;gap:12px;margin-top:12px;padding:14px 16px;border:2px dashed var(--line);border-radius:18px;background:transparent;font:inherit;color:var(--text);text-align:left}
+.folder-new span{display:flex;flex-direction:column;gap:2px}
+.folder-new small{color:var(--muted);font-size:.85rem}
+.folder-tools{display:flex;flex-wrap:wrap;gap:8px}
+.folder-tools .chip{background:var(--glass);border:1px solid var(--line);min-height:40px;padding:0 12px;font-size:.88rem}
+.folder-tools{flex-wrap:nowrap}
+.carnet-select{width:100%;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:13px 14px;color:var(--text);font:inherit}
+.game-carnet{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.game-carnet span{font-weight:700;color:var(--muted);flex:none}
+.game-carnet .carnet-select{padding:10px 12px}
 .folder-empty{margin:0;padding:14px 16px;border:1px dashed var(--line);border-radius:16px;color:var(--muted);font-size:.95rem}
 .folder-body{padding:12px 0 0 14px;border-left:2px dashed var(--line);margin-left:22px}
 .note{border:1px solid var(--line);border-radius:var(--r);padding:0;width:100%;background:var(--glass);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);box-shadow:var(--shadow);display:flex;align-items:stretch;gap:0}
@@ -469,7 +482,7 @@ mark{background:color-mix(in srgb,var(--gold) 28%,transparent);color:inherit;bor
 (() => {
 "use strict";
 const OFFLINE = true;
-const APP_VERSION = 46;
+const APP_VERSION = 47;
 const CLAUDE_CARNET = "https://claude.ai/artifact/SkJpyQF39EEnoKqUSY5DPX";
 
 /* ---------- helpers ---------- */
@@ -547,7 +560,7 @@ function speak(text, rate=0.92){ say(text, { rate }); }
 const KEYS = OFFLINE ? { notes:"carnet.notes", meta:"carnet.meta" } : { notes:"carnet.cache.notes", meta:"carnet.cache.meta" };
 const S = {
   notes: lsGet(KEYS.notes, []),
-  meta: lsGet(KEYS.meta, { streak:0, lastDay:"", reviews:0, lastBackup:0 }),
+  meta: lsGet(KEYS.meta, { streak:0, lastDay:"", reviews:0, lastBackup:0, carnets:[] }),
   unsynced: OFFLINE ? {} : lsGet("carnet.unsynced", {}),
   col: null, mode: OFFLINE ? "local" : "connecting", ai: null,
 };
@@ -582,7 +595,7 @@ async function connect(){
       snap.docs.forEach(d => { const v=d.data(); if(!v) return; if(d.id==="_meta") meta=v; else if(v.french) notes.push({ ...v, id:d.id }); });
       for (const [k, v] of Object.entries(S.unsynced)){ const i=notes.findIndex(n=>n.id===k); if(v===null){ if(i>=0) notes.splice(i,1);} else if(k!=="_meta"){ i>=0?notes[i]=v:notes.push(v);} }
       notes.sort((a,b)=>(b.created||0)-(a.created||0));
-      S.notes=notes; if(meta) S.meta={ ...S.meta, streak:meta.streak||0, lastDay:meta.lastDay||"", reviews:meta.reviews||0 };
+      S.notes=notes; if(meta) S.meta={ ...S.meta, streak:meta.streak||0, lastDay:meta.lastDay||"", reviews:meta.reviews||0, carnets: Array.isArray(meta.carnets) ? meta.carnets : (S.meta.carnets||[]), lastCarnet: meta.lastCarnet!==undefined ? meta.lastCarnet : S.meta.lastCarnet };
       S.mode="cloud"; cache(); if(!UI.session) render();
     }, () => { S.mode="local"; render(); });
   }catch(e){ S.mode="local"; render(); }
@@ -787,7 +800,7 @@ const ICONS = {
 };
 const icon = k => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[k]}</svg>`;
 function gameList(){
-  const total=S.notes.length, withMeaning=S.notes.filter(n=>n.meaning).length;
+  const P=gamePool(), total=P.length, withMeaning=P.filter(n=>n.meaning).length;
   return [
     { k:"flash", t:"Cartes", d:"Retourne la carte : français ↔ sens", off: total<1 },
     { k:"cloze", t:"Texte à trous", d:"Complète tes propres phrases", off: total<1 },
@@ -862,6 +875,75 @@ const FOLDER_IC = {
     <text x="22" y="18.5" text-anchor="middle" font-family="Comfortaa, sans-serif" font-weight="700" font-size="9" fill="#F2C877">A–Z</text>
     <path d="M29 33v6l2.5-1.8L34 39v-6z" fill="#7B4E8E"/></svg>`,
 };
+/* ---------- mes carnets (dossiers créés par moi) ---------- */
+const CARNET_COLORS = ["#D9545C","#4467A8","#2C8A7A","#7B4E8E","#D98E3E","#C2577A","#5B8FD0","#8C6A4E"];
+const myCarnets = () => (S.meta.carnets ||= []);
+const carnetOf = id => myCarnets().find(c=>c.id===id) || null;
+const notebookIc = c => `<svg class="folder-ic" viewBox="0 0 44 40" aria-hidden="true">
+  <rect x="9" y="3" width="27" height="34" rx="4" fill="${c}"/>
+  <rect x="9" y="3" width="7" height="34" rx="3" fill="#000" opacity=".16"/>
+  <rect x="20" y="10" width="12" height="8" rx="2" fill="#FFF8EC"/>
+  <path d="M22.5 13h7M22.5 15.5h5" stroke="${c}" stroke-width="1.3" stroke-linecap="round"/>
+  ${[8,15,22,29].map(y=>`<path d="M6 ${y}h6" stroke="#5A4A52" stroke-width="2.2" stroke-linecap="round"/>`).join("")}
+  <path d="M30 37v4l2.2-1.5L34.4 41v-4z" fill="#F2B65A"/></svg>`;
+function createCarnet(name){
+  name=String(name||"").trim().slice(0,60); if(!name) return null;
+  const ex=myCarnets().find(c=>loose(c.name)===loose(name)); if(ex) return ex;
+  const c={ id:"c"+uid(), name, color:CARNET_COLORS[myCarnets().length % CARNET_COLORS.length], created:Date.now() };
+  myCarnets().push(c); saveMeta(); return c;
+}
+function openCarnetForm(c, after){
+  openSheet(`
+    <h2>${c?"Renommer le carnet":"Nouveau carnet"}</h2>
+    <form id="cf">
+      <div class="field"><label for="c-name">Nom</label>
+        <input id="c-name" required maxlength="60" value="${esc(c?c.name:"")}" placeholder="ex. Lupin, saison 1" autocomplete="off">
+        <span class="hint">Par exemple « Leçon 5 », « Au travail » ou le nom d'une série.</span></div>
+      <div class="btnrow"><button type="button" class="btn ghost" id="c-cancel">Annuler</button><button class="btn primary" type="submit">${c?"Enregistrer":"Créer"}</button></div>
+    </form>`, s => {
+      const inp=$("#c-name",s); setTimeout(()=>inp.focus(),250);
+      $("#c-cancel",s).addEventListener("click", closeSheet);
+      $("#cf",s).addEventListener("submit", e => {
+        e.preventDefault(); const name=inp.value.trim(); if(!name) return;
+        let made=c;
+        if (c){ c.name=name.slice(0,60); saveMeta(); toast("Carnet renommé"); }
+        else { made=createCarnet(name); UI.folders=UI.folders||{}; UI.folders["c:"+made.id]=true; toast("Carnet créé"); }
+        closeSheet(); render(); after && after(made);
+      });
+    });
+}
+function openCarnetDelete(c){
+  const n=S.notes.filter(x=>x.carnet===c.id).length;
+  openSheet(`
+    <h2>Supprimer « ${esc(c.name)} » ?</h2>
+    <p style="color:var(--muted)">${n?`Tes ${plural(n,"note","notes")} ne seront pas effacées : elles restent dans ton carnet, rangées par date.`:"Ce carnet est vide."}</p>
+    <div class="btnrow"><button class="btn ghost" id="d-no">Annuler</button><button class="btn primary" id="d-yes" style="background:#B8434B">Supprimer le carnet</button></div>`, s => {
+      $("#d-no",s).addEventListener("click", closeSheet);
+      $("#d-yes",s).addEventListener("click", () => {
+        S.meta.carnets=myCarnets().filter(x=>x.id!==c.id);
+        if (S.meta.lastCarnet===c.id) S.meta.lastCarnet="";
+        S.notes.filter(x=>x.carnet===c.id).forEach(x=>{ x.carnet=""; write(x.id,x); });
+        saveMeta(); closeSheet(); render(); toast("Carnet supprimé");
+      });
+    });
+}
+function myCarnetFolders(list){
+  UI.folders=UI.folders||{ week:true };
+  const cs=myCarnets();
+  const items=cs.map(c => {
+    const ns=list.filter(n=>n.carnet===c.id), k="c:"+c.id, open=!!UI.folders[k];
+    return `<section class="folder ${open?"open":""}">
+      <button class="folder-head" data-folder="${k}" aria-expanded="${open}">
+        ${notebookIc(c.color)}<span class="folder-name">${esc(c.name)}</span><span class="folder-n">${ns.length?plural(ns.length,"note","notes"):"vide"}</span>
+        <svg class="folder-chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+      </button>
+      ${open?`<div class="list folder-body">${ns.map(noteCard).join("") || `<p class="folder-empty">Rien ici pour l'instant. Choisis ce carnet quand tu ajoutes une note.</p>`}
+        <div class="folder-tools"><button class="chip" data-addto="${c.id}">＋ Ajouter ici</button><button class="chip" data-rename="${c.id}">Renommer</button><button class="chip" data-delcarnet="${c.id}">Supprimer</button></div></div>`:""}
+    </section>`; }).join("");
+  return `<div class="sec-head"><h2>Mes carnets</h2><button class="chip new-carnet" id="newCarnet">＋ Nouveau</button></div>
+    ${items || `<button class="folder-new" id="newCarnet2">${notebookIc("#B9A7B1")}<span><strong>Crée ton premier carnet</strong><small>ex. « Lupin, saison 1 », « Leçon 5 », « Au travail »</small></span></button>`}
+    <div class="sec-head"><h2>Par date</h2></div>`;
+}
 function dateGroups(list){
   const now=new Date();
   const week=new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay()+6)%7)).getTime(); // lundi
@@ -896,11 +978,16 @@ function renderCarnet(){
     <div class="chips" role="group" aria-label="Filtrer">
       ${[["all","Tout"],["mot","Mots"],["expression","Expressions"],["phrase","Phrases"]].map(([k,l])=>`<button class="chip" data-f="${k}" aria-pressed="${UI.filter===k}">${l}<span class="n">${counts[k]||0}</span></button>`).join("")}
     </div>
+    ${!q ? myCarnetFolders(list) : ""}
     ${list.length ? dateGroups(list) : (q || UI.filter!=="all") && S.notes.length ? `<div class="list">${emptyState()}</div>` : `${S.notes.length?"":`<div class="list">${emptyState()}</div>`}${dateGroups([])}`}`;
   const qi=$("#q"); qi.addEventListener("input", e => { UI.q=e.target.value; render(); });
   if (hadFocus){ qi.focus(); qi.setSelectionRange(qi.value.length, qi.value.length); }
   app.querySelectorAll("[data-f]").forEach(b => b.addEventListener("click", () => { UI.filter=b.dataset.f; renderCarnet(); }));
   app.querySelectorAll("[data-folder]").forEach(b => b.addEventListener("click", () => { if (UI.q.trim()) return; const k=b.dataset.folder; UI.folders[k]=!UI.folders[k]; renderCarnet(); }));
+  ["#newCarnet","#newCarnet2"].forEach(id => { const b=$(id); if(b) b.addEventListener("click", () => openCarnetForm(null)); });
+  app.querySelectorAll("[data-rename]").forEach(b => b.addEventListener("click", () => openCarnetForm(carnetOf(b.dataset.rename))));
+  app.querySelectorAll("[data-delcarnet]").forEach(b => b.addEventListener("click", () => openCarnetDelete(carnetOf(b.dataset.delcarnet))));
+  app.querySelectorAll("[data-addto]").forEach(b => b.addEventListener("click", () => openEditor(null, "", b.dataset.addto)));
   bindNotes(app);
   const ex=$("#addExamples"); if(ex) ex.addEventListener("click", addExamples);
   const nw=$("#addFirst"); if(nw) nw.addEventListener("click", () => openEditor());
@@ -946,10 +1033,14 @@ function addExamples(){
 
 /* ---------- Jeux ---------- */
 function renderGames(){
-  const due=S.notes.filter(isDue).length;
+  if (UI.gameCarnet && !carnetOf(UI.gameCarnet)) UI.gameCarnet="";
+  const due=gamePool().filter(isDue).length;
   app.innerHTML = `
     <header class="top"><div><h1>Jeux</h1><div class="sub">Choisis un jeu, ou laisse le hasard choisir</div></div>${syncBadge()}</header>
-    <button class="btn primary block" id="mix" ${S.notes.length?"":"disabled"} style="min-height:58px;font-size:1.05rem">${icon("mix")} Session surprise${due?` · ${plural(due,"note","notes")} à revoir`:""}</button>
+    ${S.notes.length && myCarnets().length?`<label class="game-carnet"><span>Réviser :</span><select id="gCarnet" class="carnet-select">
+      <option value="">Tout mon carnet</option>
+      ${myCarnets().map(c=>`<option value="${c.id}" ${UI.gameCarnet===c.id?"selected":""}>${esc(c.name)}</option>`).join("")}</select></label>`:""}
+    <button class="btn primary block" id="mix" ${gamePool().length?"":"disabled"} style="min-height:58px;font-size:1.05rem">${icon("mix")} Session surprise${due?` · ${plural(due,"note","notes")} à revoir`:""}</button>
     ${S.notes.length?"":`<div class="empty">Ajoute quelques notes pour débloquer les jeux.</div>`}
     <div class="plaques" style="margin-top:16px">${gameList().map(plaqueHTML).join("")}</div>
     ${S.notes.length?souvenirsHTML():""}
@@ -957,6 +1048,7 @@ function renderGames(){
     ${OFFLINE?`<p style="color:var(--muted);font-size:.92rem;margin-top:16px">Les jeux « IA ↗ » s'ouvrent dans la version Claude et ont besoin d'internet.</p>`:""}
     <div class="version">Version ${APP_VERSION}</div>`;
   $("#mix").addEventListener("click", () => startSession("mix"));
+  const gc=$("#gCarnet"); if(gc) gc.addEventListener("change", () => { UI.gameCarnet=gc.value; render(); });
   bindGames(app);
 }
 
@@ -1113,8 +1205,9 @@ function groqErr(e){
   return "Groq n'a pas pu répondre" + (e && e.status ? ` (erreur ${e.status})` : "") + ". Attends un moment et réessaie.";
 }
 
-function openEditor(n, prefill){
-  const isNew=!n; n = n || { kind:"expression", french:prefill||"", meaning:"", example:"" };
+function openEditor(n, prefill, carnetId){
+  const isNew=!n; n = n || { kind:"expression", french:prefill||"", meaning:"", example:"", carnet: carnetId!==undefined ? carnetId : (carnetOf(S.meta.lastCarnet) ? S.meta.lastCarnet : "") };
+  if (n.carnet && !carnetOf(n.carnet)) n = { ...n, carnet:"" };
   let kind = isNew && prefill ? guessKind(prefill) : n.kind;
   openSheet(`
     <h2>${isNew?"Nouvelle note":"Modifier la note"}</h2>
@@ -1123,6 +1216,13 @@ function openEditor(n, prefill){
         <div style="display:flex;gap:8px"><input id="f-fr" required value="${esc(n.french)}" placeholder="ex. avoir le cafard" autocomplete="off" autocapitalize="off" spellcheck="false" style="flex:1;min-width:0">
         ${canAutoFill()?`<button type="button" class="btn" id="fill" style="flex:none;padding:0 14px;background:var(--shop-glass);color:var(--shop-sign)">✦ Remplir</button>`:""}</div>
         <span class="hint" id="fillMsg">${canAutoFill()?"Écris le mot, l'expression ou la phrase : je trouve le sens et un exemple.":""}</span></div>
+      <div class="field"><label for="f-carnet">Carnet</label>
+        <select id="f-carnet" class="carnet-select">
+          <option value="">— Aucun —</option>
+          ${myCarnets().map(c=>`<option value="${c.id}" ${c.id===n.carnet?"selected":""}>${esc(c.name)}</option>`).join("")}
+          <option value="__new">＋ Nouveau carnet…</option>
+        </select>
+        <input id="f-carnet-new" placeholder="Nom du nouveau carnet, ex. Leçon 5" maxlength="60" autocomplete="off" style="display:none;margin-top:8px"></div>
       <div class="field"><label>Type</label><div class="seg">
         ${["mot","expression","phrase"].map(k=>`<button type="button" data-k="${k}" aria-pressed="${k===kind}">${KIND_LABEL[k]}</button>`).join("")}</div></div>
       <div class="field"><label for="f-mean">Sens</label><input id="f-mean" value="${esc(n.meaning)}" placeholder="ex. to feel down" autocomplete="off"></div>
@@ -1135,6 +1235,8 @@ function openEditor(n, prefill){
       $("#cancel",s).addEventListener("click", () => isNew ? closeSheet() : openDetail(n.id));
       const fr=$("#f-fr",s), mean=$("#f-mean",s), ex=$("#f-ex",s), msg=$("#fillMsg",s), btn=$("#fill",s);
       let busy=false, lastFilled="";
+      const csel=$("#f-carnet",s), cnew=$("#f-carnet-new",s);
+      csel.addEventListener("change", () => { const nw=csel.value==="__new"; cnew.style.display=nw?"":"none"; if(nw) cnew.focus(); });
       async function fill(force){
         const text=fr.value.trim(); if(!text || busy || !canAutoFill()) return;
         if(!force && (mean.value.trim() || ex.value.trim())) return;
@@ -1159,7 +1261,10 @@ function openEditor(n, prefill){
       $("#ed",s).addEventListener("submit", e => {
         e.preventDefault();
         const french=fr.value.trim(); if(!french) return;
-        const out = { ...n, kind, french, meaning:mean.value.trim(), example:ex.value.trim() };
+        let carnet = csel.value;
+        if (carnet==="__new"){ const c=createCarnet(cnew.value); carnet = c ? c.id : ""; }
+        const out = { ...n, kind, french, meaning:mean.value.trim(), example:ex.value.trim(), carnet };
+        if (isNew && S.meta.lastCarnet!==carnet){ S.meta.lastCarnet=carnet; saveMeta(); }
         delete out.source;
         if (isNew){ out.id=uid(); out.created=Date.now(); out.box=0; out.due=0; }
         if (french!==n.french) delete out.ai;
@@ -1188,7 +1293,7 @@ function openDetail(id){
     <div class="detail-fr" style="margin-top:12px">${esc(n.french)}</div>
     ${n.meaning?`<div class="detail-mean">${esc(n.meaning)}</div>`:""}
     ${n.example?`<div class="detail-ex">${esc(clean(n.example))}</div>`:""}
-    <div class="meta-line">Niveau ${n.box||0}/5${n.seen?` · revu ${n.seen} fois`:""}</div>
+    <div class="meta-line">${carnetOf(n.carnet)?`Carnet : ${esc(carnetOf(n.carnet).name)} · `:""}Niveau ${n.box||0}/5${n.seen?` · revu ${n.seen} fois`:""}</div>
     <div class="section-label">En vidéo</div>
     ${videoLinks(n.french)}
     ${showAI?`<div class="section-label">En contexte</div><div id="aiZone">${aiContextHTML(n)}</div>`:""}
@@ -1317,6 +1422,10 @@ function openBackup(){
           if(i<0){ S.notes.push(n); added++; } else { S.notes[i]={ ...S.notes[i], ...n }; updated++; }
           await write(n.id, i<0 ? n : S.notes[i]);
         }
+        if (data.meta && Array.isArray(data.meta.carnets)){
+          data.meta.carnets.forEach(c => { if (c && c.id && c.name && !carnetOf(c.id)) myCarnets().push(c); });
+          saveMeta();
+        }
         S.notes.sort((a,b)=>(b.created||0)-(a.created||0));
         cache(); render();
         msg("ok", `${plural(added,"nouvelle note ajoutée","nouvelles notes ajoutées")}${updated?`, ${updated} mise${updated>1?"s":""} à jour`:""}.`);
@@ -1345,18 +1454,20 @@ function openInClaude(game){
 }
 
 /* ---------- séances (cartes / trous / dictée / écrire / surprise) ---------- */
+const gamePool = () => carnetOf(UI.gameCarnet) ? S.notes.filter(n=>n.carnet===UI.gameCarnet) : S.notes;
 function pickNotes(max=10){
-  const due=shuffle(S.notes.filter(isDue)).sort((a,b)=>(a.box||0)-(b.box||0));
+  const POOL=gamePool();
+  const due=shuffle(POOL.filter(isDue)).sort((a,b)=>(a.box||0)-(b.box||0));
   let picked=due.slice(0,max);
-  const want=Math.min(max,S.notes.length);
+  const want=Math.min(max,POOL.length);
   if (picked.length<want){
-    const rest=shuffle(S.notes.filter(n=>!picked.includes(n))).sort((a,b)=>(a.due||0)-(b.due||0));
+    const rest=shuffle(POOL.filter(n=>!picked.includes(n))).sort((a,b)=>(a.due||0)-(b.due||0));
     picked=picked.concat(rest.slice(0, want-picked.length));
   }
   return shuffle(picked);
 }
 function startSession(mode){
-  if (!S.notes.length) return;
+  if (!gamePool().length) return;
   const items=pickNotes(mode==="write"?5:10).map(n=>({ id:n.id, mode: mode==="mix" ? mixMode() : mode }));
   UI.session={ kind:"cards", items, i:0, right:0 };
   window.scrollTo(0,0); render(); renderStep();
@@ -1505,7 +1616,7 @@ Return JSON only: {"uses_item": true if she used the target item correctly in me
 
 /* ---------- Associer ---------- */
 function startMatch(){
-  const pool=shuffle(S.notes.filter(n=>n.meaning)).slice(0,5);
+  const pool=shuffle(gamePool().filter(n=>n.meaning)).slice(0,5);
   if(pool.length<3){ toast("Ajoute le sens d'au moins 3 notes pour jouer"); return; }
   UI.session={ kind:"match" };
   const left=shuffle(pool.map(n=>({id:n.id,t:n.french}))), right=shuffle(pool.map(n=>({id:n.id,t:n.meaning})));
