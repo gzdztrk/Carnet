@@ -279,6 +279,8 @@ body.sparkling .sparkle circle{animation:spark .9s ease-in-out infinite}
 .date-tile .dt-n{font-size:.78rem;color:var(--muted);font-weight:700}
 .date-tile.on{border:2px solid var(--accent);background:var(--card)}
 .date-body{margin-top:12px}
+.sync-code{font-family:ui-monospace,Menlo,monospace;font-size:1.35rem;font-weight:700;letter-spacing:.08em;text-align:center;padding:12px;border-radius:14px;background:var(--card);border:1px dashed var(--line);user-select:all;-webkit-user-select:all}
+.linkish{background:none;border:0;color:var(--muted);text-decoration:underline;font:inherit;font-size:.9rem;padding:6px 0;align-self:flex-start}
 .sec-btns{display:flex;gap:8px}
 .sort-btn{background:var(--glass);border:1px solid var(--line);font-weight:700}
 .sort-tip{margin:6px 2px 0;color:var(--muted);font-size:.9rem}
@@ -496,7 +498,7 @@ mark{background:color-mix(in srgb,var(--gold) 28%,transparent);color:inherit;bor
 (() => {
 "use strict";
 const OFFLINE = true;
-const APP_VERSION = 50;
+const APP_VERSION = 51;
 const CLAUDE_CARNET = "https://claude.ai/artifact/SkJpyQF39EEnoKqUSY5DPX";
 
 /* ---------- helpers ---------- */
@@ -572,6 +574,7 @@ function speak(text, rate=0.92){ say(text, { rate }); }
 
 /* ---------- stockage ---------- */
 const KEYS = OFFLINE ? { notes:"carnet.notes", meta:"carnet.meta" } : { notes:"carnet.cache.notes", meta:"carnet.cache.meta" };
+const SYNC = { applying:false, timer:null, busy:false, again:false, last:0, err:"" };
 const S = {
   notes: lsGet(KEYS.notes, []),
   meta: lsGet(KEYS.meta, { streak:0, lastDay:"", reviews:0, lastBackup:0, carnets:[] }),
@@ -582,6 +585,7 @@ function cache(){
   const ok = lsSet(KEYS.notes, S.notes) && lsSet(KEYS.meta, S.meta);
   if (!OFFLINE) lsSet("carnet.unsynced", S.unsynced);
   if (!ok && OFFLINE) toast("Impossible d'enregistrer : la mémoire du téléphone est peut-être pleine.");
+  if (OFFLINE && !SYNC.applying) syncSoon();
 }
 async function write(id, data){
   if (OFFLINE) return;
@@ -591,6 +595,93 @@ async function write(id, data){
 function saveNote(n){ const i=S.notes.findIndex(x=>x.id===n.id); if(i<0) S.notes.unshift(n); else S.notes[i]=n; cache(); render(); write(n.id, n); }
 function deleteNote(id){ S.notes=S.notes.filter(n=>n.id!==id); cache(); render(); write(id, null); }
 function saveMeta(){ cache(); write("_meta", { ...S.meta, kind:"_meta" }); }
+
+/* ---------- synchro iPhone ↔ iPad (par le relais Cloudflare) ---------- */
+const SYNC_META = ["streak","lastDay","reviews","cards","lastCarnet","carnetOrder"];
+const getSyncCode = () => { try{ return localStorage.getItem("carnet.sync") || ""; }catch{ return ""; } };
+const syncOn = () => OFFLINE && !!getSyncCode() && !!getRelay();
+function newSyncCode(){
+  const A="ABCDEFGHJKLMNPQRSTUVWXYZ23456789", r=new Uint32Array(12); crypto.getRandomValues(r);
+  const c=[...r].map(x=>A[x%A.length]).join(""); return c.slice(0,4)+"-"+c.slice(4,8)+"-"+c.slice(8);
+}
+const normCode = c => String(c||"").toUpperCase().replace(/[^A-Z0-9]/g,"").replace(/^(.{4})(.{4})(.{4}).*$/,"$1-$2-$3");
+// same merge as the relay: newest version of each note wins, deletions win over older versions
+function mergeDocs(a, b){
+  a=a||{}; b=b||{};
+  const del={ ...(a.deleted||{}) };
+  for (const [k,v] of Object.entries(b.deleted||{})) if (!(del[k]>=v)) del[k]=v;
+  const pick=(x,y)=>{ const m=new Map(); for (const n of [...(x||[]),...(y||[])]){ if(!n||!n.id) continue; const o=m.get(n.id); if(!o || (n.upd||0)>(o.upd||0)) m.set(n.id,n); }
+    return [...m.values()].filter(n=>!(del[n.id]>=(n.upd||0))); };
+  const ma=a.meta||{}, mb=b.meta||{};
+  return { v:1, notes:pick(a.notes,b.notes), carnets:pick(a.carnets,b.carnets), deleted:del, meta:(mb.upd||0)>(ma.upd||0)?mb:ma };
+}
+function localDoc(){
+  // stamp what changed on this device since the last synchro
+  const base=lsGet("carnet.syncBase", { notes:{}, carnets:{}, meta:"" });
+  const del=lsGet("carnet.syncDeleted", {}); const now=Date.now();
+  const strip = o => { const { upd, ...r } = o; return JSON.stringify(r); };
+  const stamp = (list, b) => { const ids=new Set();
+    list.forEach(o => { ids.add(o.id); if (b[o.id]!==strip(o)) o.upd=now; });
+    Object.keys(b).forEach(id => { if (!ids.has(id)) del[id]=now; }); };
+  stamp(S.notes, base.notes);
+  const cs=myCarnets(); stamp(cs, base.carnets);
+  S.meta.carnetOrder = cs.map(c=>c.id);
+  const meta={}; SYNC_META.forEach(k => { if (S.meta[k]!==undefined) meta[k]=S.meta[k]; });
+  if (JSON.stringify(meta)!==base.meta) S.meta.syncUpd=now;
+  meta.upd=S.meta.syncUpd||0;
+  lsSet("carnet.syncDeleted", del);
+  return { v:1, notes:S.notes, carnets:cs, deleted:del, meta };
+}
+function applyDoc(doc){
+  SYNC.applying=true;
+  try{
+    const strip = o => { const { upd, ...r } = o; return JSON.stringify(r); };
+    const before=JSON.stringify([S.notes,S.meta.carnets]);
+    S.notes=(doc.notes||[]).slice().sort((a,b)=>(b.created||0)-(a.created||0));
+    const order=(doc.meta&&doc.meta.carnetOrder)||[];
+    S.meta.carnets=(doc.carnets||[]).slice().sort((a,b)=>{ const i=order.indexOf(a.id), j=order.indexOf(b.id); return (i<0?1e9:i)-(j<0?1e9:j); });
+    const m=doc.meta||{}; SYNC_META.forEach(k => { if (m[k]!==undefined) S.meta[k]=m[k]; }); S.meta.syncUpd=m.upd||0;
+    const meta={}; SYNC_META.forEach(k => { if (S.meta[k]!==undefined) meta[k]=S.meta[k]; });
+    const base={ notes:{}, carnets:{}, meta:JSON.stringify(meta) };
+    S.notes.forEach(n=>base.notes[n.id]=strip(n)); S.meta.carnets.forEach(c=>base.carnets[c.id]=strip(c));
+    lsSet("carnet.syncBase", base);
+    // forget deletions older than 60 days
+    const del=doc.deleted||{}, cut=Date.now()-60*DAY; Object.keys(del).forEach(k=>{ if(del[k]<cut) delete del[k]; });
+    lsSet("carnet.syncDeleted", del);
+    cache();
+    if (before!==JSON.stringify([S.notes,S.meta.carnets]) && !UI.session && !$("#scrim")) render();
+  } finally { SYNC.applying=false; }
+}
+function syncSoon(delay=2500){ if (!syncOn()) return; clearTimeout(SYNC.timer); SYNC.timer=setTimeout(syncNow, delay); }
+async function syncNow(){
+  if (!syncOn()) return false;
+  if (SYNC.busy){ SYNC.again=true; return false; }
+  SYNC.busy=true; clearTimeout(SYNC.timer);
+  try{
+    const mine=localDoc();
+    const res = await fetch(getRelay().replace(/\/+$/,"")+"/sync", { method:"POST", headers:{ "content-type":"application/json" },
+      body: JSON.stringify({ code:getSyncCode(), doc:mine }) });
+    let j={}; try{ j=await res.json(); }catch{}
+    if (!res.ok || j.error){ SYNC.err = j.error==="no_kv" ? "nokv" : (res.status===404 ? "old" : "net"); return false; }
+    applyDoc(mergeDocs(mine, j.doc));
+    SYNC.last=Date.now(); SYNC.err=""; return true;
+  }catch{ SYNC.err="net"; return false; }
+  finally{ SYNC.busy=false; if (SYNC.again){ SYNC.again=false; syncSoon(500); } updateSyncBadge(); }
+}
+function updateSyncBadge(){ const b=$("#backupBtn"); if (b && OFFLINE){ const t=document.createElement("div"); t.innerHTML=syncBadge(); b.replaceWith(t.firstElementChild); } const st=$("#syncState"); if (st) st.innerHTML=syncStateHTML(); }
+function syncStateHTML(){
+  if (SYNC.err==="nokv") return `<div class="feedback no">Le relais n'a pas encore d'espace de stockage. Ajoute un espace KV dans Cloudflare (voir les étapes que Claude t'a données).</div>`;
+  if (SYNC.err==="old") return `<div class="feedback no">Ton relais doit être mis à jour avec le nouveau code pour la synchro.</div>`;
+  if (SYNC.err) return `<div class="feedback close">Pas de connexion pour l'instant. La synchro reprendra toute seule.</div>`;
+  return SYNC.last ? `<div class="feedback ok">Synchronisé à ${new Date(SYNC.last).toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})} ✓</div>` : `<div class="loading"><div class="spinner"></div>Synchro…</div>`;
+}
+if (OFFLINE){
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState==="visible") syncNow(); });
+  window.addEventListener("online", () => syncNow());
+  setInterval(() => { if (document.visibilityState==="visible" && !UI.session) syncNow(); }, 30000);
+  setTimeout(() => syncNow(), 600);
+}
+
 if (OFFLINE && navigator.storage && navigator.storage.persist) { try{ navigator.storage.persist(); }catch{} }
 
 async function connect(){
@@ -796,6 +887,7 @@ function syncBadge(){
   if (OFFLINE){
     const days = S.meta.lastBackup ? Math.floor((Date.now()-S.meta.lastBackup)/DAY) : null;
     const warn = S.notes.length>=5 && (days===null || days>=14);
+    if (syncOn()){ const bad=!!SYNC.err; return `<button class="sync ${bad?"local":"ok"}" id="backupBtn"><i></i>${bad?"Synchro en pause":"Synchronisé"}</button>`; }
     return `<button class="sync ${warn?"local":"ok"}" id="backupBtn"><i></i>${warn?"Fais une sauvegarde":"Sauvegarde"}</button>`;
   }
   const st = S.mode==="cloud" ? ["ok","Enregistré"] : S.mode==="local" ? ["local","Sur cet appareil"] : ["","Connexion…"];
@@ -1388,11 +1480,28 @@ function openBackup(){
   const last = S.meta.lastBackup ? new Date(S.meta.lastBackup).toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"}) : "jamais";
   openSheet(OFFLINE ? `
     <h2>Sauvegarde</h2>
-    <p style="margin:0 0 10px">Tes notes sont gardées uniquement sur ce téléphone. Fais une sauvegarde de temps en temps (dans Fichiers ou iCloud Drive) pour les retrouver si tu changes de téléphone.</p>
+    <p style="margin:0 0 10px">${getSyncCode()&&getRelay() ? "Tes notes sont gardées sur cet appareil et copiées dans ton relais Cloudflare. Une sauvegarde de temps en temps reste une bonne idée." : "Tes notes sont gardées uniquement sur cet appareil. Fais une sauvegarde de temps en temps (dans Fichiers ou iCloud Drive), ou active la synchro ci-dessous."}</p>
     <div class="meta-line">${plural(S.notes.length,"note","notes")} · Dernière sauvegarde : ${last}</div>
     <div class="btnrow" style="margin-top:18px"><button class="btn primary" id="exp">Faire une sauvegarde</button><button class="btn ghost" id="imp">Restaurer un fichier</button></div>
     <input type="file" id="impFile" class="vh" accept=".json,application/json,text/plain" tabindex="-1" aria-hidden="true">
     <div id="bkMsg" style="margin-top:14px"></div>
+    <div class="section-label">Synchro iPhone ↔ iPad</div>
+    <div class="ai-box">
+      ${!getRelay() ? `<div style="font-size:.95rem">Ajoute d'abord l'adresse de ton relais ci-dessous : la synchro passe par lui.</div>`
+      : getSyncCode() ? `
+        <div style="font-size:.95rem">Tes notes et tes carnets sont partagés avec tes autres appareils qui utilisent ce code :</div>
+        <div class="sync-code">${esc(getSyncCode())}</div>
+        <div id="syncState">${syncStateHTML()}</div>
+        <div class="btnrow"><button class="btn primary" id="syncGo" type="button">Synchroniser maintenant</button><button class="btn ghost" id="syncCopy" type="button">Copier le code</button></div>
+        <button class="linkish" id="syncOff" type="button">Arrêter la synchro sur cet appareil</button>`
+      : `
+        <div style="font-size:.95rem">Utilise le même carnet sur ton iPhone et ton iPad. Sur le premier appareil, crée un code. Sur l'autre, écris ce code.</div>
+        <div class="btnrow"><button class="btn primary" id="syncNew" type="button">Créer un code</button></div>
+        <label class="field" style="margin:0"><span style="font-size:.85rem;font-weight:700;color:var(--muted)">J'ai déjà un code</span>
+          <input id="syncIn" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX-XXXX"></label>
+        <div class="btnrow"><button class="btn ghost" id="syncJoin" type="button">Relier cet appareil</button></div>
+        <div id="syncMsg"></div>`}
+    </div>
     <div class="section-label">Groq pour ✦ Remplir (gratuit)</div>
     <div class="ai-box">
       <div style="font-size:.95rem">Colle ici l'adresse de ton relais Cloudflare. ✦ Remplir utilisera alors l'IA de Groq pour trouver le sens et un exemple.${getRelay()?` <b style="color:var(--ok)">Relais enregistré ✓</b>`:""}</div>
@@ -1408,6 +1517,27 @@ function openBackup(){
     <input type="file" id="impFile" class="vh" accept=".json,application/json,text/plain" tabindex="-1" aria-hidden="true">
     <div id="bkMsg" style="margin-top:14px"></div>`, s => {
     const msg = (cls, t) => { $("#bkMsg",s).innerHTML = `<div class="feedback ${cls}">${esc(t)}</div>`; };
+    const startSync = async (code, mode) => {
+      try{ localStorage.setItem("carnet.sync", code); }catch{}
+      lsSet("carnet.syncBase", { notes:{}, carnets:{}, meta:"" }); lsSet("carnet.syncDeleted", {});
+      if (mode==="replace"){ SYNC.applying=true; S.notes=[]; S.meta.carnets=[]; S.meta.syncUpd=0; cache(); SYNC.applying=false; }
+      const sm=$("#syncMsg",s); if (sm) sm.innerHTML=`<div class="loading"><div class="spinner"></div>Synchro…</div>`;
+      const ok = await syncNow();
+      openBackup(); render(); toast(ok ? "Synchro activée" : "Code enregistré. La synchro reprendra dès que possible.");
+    };
+    const sn=$("#syncNew",s); if (sn) sn.addEventListener("click", () => startSync(newSyncCode(), "merge"));
+    const sj=$("#syncJoin",s); if (sj) sj.addEventListener("click", () => {
+      const code=normCode($("#syncIn",s).value);
+      if (!/^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(code)){ $("#syncMsg",s).innerHTML=`<div class="feedback no">Le code a 12 lettres et chiffres, comme ABCD-EFGH-2345.</div>`; return; }
+      if (!S.notes.length) return startSync(code, "merge");
+      $("#syncMsg",s).innerHTML=`<div class="feedback close" style="display:flex;flex-direction:column;gap:10px">Cet appareil a déjà ${plural(S.notes.length,"note","notes")}. Que veux-tu faire ?
+        <div class="btnrow"><button class="btn primary" id="sjMerge" type="button">Tout garder (fusionner)</button><button class="btn ghost" id="sjReplace" type="button">Remplacer par l'autre appareil</button></div></div>`;
+      $("#sjMerge",s).addEventListener("click", () => startSync(code, "merge"));
+      $("#sjReplace",s).addEventListener("click", () => startSync(code, "replace"));
+    });
+    const sg=$("#syncGo",s); if (sg) sg.addEventListener("click", async () => { $("#syncState",s).innerHTML=`<div class="loading"><div class="spinner"></div>Synchro…</div>`; await syncNow(); });
+    const sc=$("#syncCopy",s); if (sc) sc.addEventListener("click", async () => { try{ await navigator.clipboard.writeText(getSyncCode()); toast("Code copié"); }catch{ toast("Code : "+getSyncCode()); } });
+    const so=$("#syncOff",s); if (so) so.addEventListener("click", () => { try{ localStorage.removeItem("carnet.sync"); }catch{} SYNC.err=""; SYNC.last=0; openBackup(); render(); toast("Synchro arrêtée sur cet appareil"); });
     const sr=$("#saveRelay",s);
     if (sr) sr.addEventListener("click", async () => {
       let v=$("#relayUrl",s).value.trim(); const rm=$("#relayMsg",s);
