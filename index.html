@@ -522,7 +522,7 @@ mark{background:color-mix(in srgb,var(--gold) 28%,transparent);color:inherit;bor
 (() => {
 "use strict";
 const OFFLINE = true;
-const APP_VERSION = 53;
+const APP_VERSION = 54;
 const CLAUDE_CARNET = "https://claude.ai/artifact/SkJpyQF39EEnoKqUSY5DPX";
 
 /* ---------- helpers ---------- */
@@ -622,6 +622,7 @@ function saveMeta(){ cache(); write("_meta", { ...S.meta, kind:"_meta" }); }
 
 /* ---------- synchro iPhone ↔ iPad (par le relais Cloudflare) ---------- */
 const SYNC_META = ["streak","lastDay","reviews","cards","lastCarnet","carnetOrder"];
+const MY_CARNET = "MONC-ARNE-TFR1"; // one carnet in your own relay, no code to remember
 const getSyncCode = () => { try{ return localStorage.getItem("carnet.sync") || ""; }catch{ return ""; } };
 const syncOn = () => OFFLINE && !!getSyncCode() && !!getRelay();
 function newSyncCode(){
@@ -1507,19 +1508,15 @@ function openBackup(){
     <div id="bkMsg" style="margin-top:14px"></div>
     <div class="section-label">Synchro iPhone ↔ iPad</div>
     <div class="ai-box">
-      ${!getRelay() ? `<div style="font-size:.95rem">Ajoute d'abord l'adresse de ton relais ci-dessous : la synchro passe par lui.</div>`
+      ${!getRelay() ? `<div style="font-size:.95rem">Colle d'abord l'adresse de ton relais ci-dessous (et touche « Enregistrer et tester »). La synchro passe par lui.</div>`
       : getSyncCode() ? `
-        <div style="font-size:.95rem">Tes notes et tes carnets sont partagés avec tes autres appareils qui utilisent ce code :</div>
-        <div class="sync-code">${esc(getSyncCode())}</div>
+        <div style="font-size:.95rem">La synchro est active ✓ Tes notes et tes carnets sont copiés dans ton relais et partagés avec tes autres appareils.</div>
         <div id="syncState">${syncStateHTML()}</div>
-        <div class="btnrow"><button class="btn primary" id="syncGo" type="button">Synchroniser maintenant</button><button class="btn ghost" id="syncCopy" type="button">Copier le code</button></div>
+        <div class="btnrow"><button class="btn primary" id="syncGo" type="button">Synchroniser maintenant</button></div>
         <button class="linkish" id="syncOff" type="button">Arrêter la synchro sur cet appareil</button>`
       : `
-        <div style="font-size:.95rem">Utilise le même carnet sur ton iPhone et ton iPad. Sur le premier appareil, crée un code. Sur l'autre, écris ce code.</div>
-        <div class="btnrow"><button class="btn primary" id="syncNew" type="button">Créer un code</button></div>
-        <label class="field" style="margin:0"><span style="font-size:.85rem;font-weight:700;color:var(--muted)">J'ai déjà un code</span>
-          <input id="syncIn" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX-XXXX"></label>
-        <div class="btnrow"><button class="btn ghost" id="syncJoin" type="button">Relier cet appareil</button></div>
+        <div style="font-size:.95rem">Garde une copie de ton carnet dans ton relais, et retrouve-le sur ton iPhone et ton iPad. Sur chaque appareil, il suffit de coller l'adresse du relais puis d'activer la synchro.</div>
+        <div class="btnrow"><button class="btn primary" id="syncNew" type="button">Activer la synchro</button></div>
         <div id="syncMsg"></div>`}
     </div>
     <div class="section-label">Groq pour ✦ Remplir (gratuit)</div>
@@ -1545,18 +1542,8 @@ function openBackup(){
       const ok = await syncNow();
       openBackup(); render(); toast(ok ? "Synchro activée" : "Code enregistré. La synchro reprendra dès que possible.");
     };
-    const sn=$("#syncNew",s); if (sn) sn.addEventListener("click", () => startSync(newSyncCode(), "merge"));
-    const sj=$("#syncJoin",s); if (sj) sj.addEventListener("click", () => {
-      const code=normCode($("#syncIn",s).value);
-      if (!/^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(code)){ $("#syncMsg",s).innerHTML=`<div class="feedback no">Le code a 12 lettres et chiffres, comme ABCD-EFGH-2345.</div>`; return; }
-      if (!S.notes.length) return startSync(code, "merge");
-      $("#syncMsg",s).innerHTML=`<div class="feedback close" style="display:flex;flex-direction:column;gap:10px">Cet appareil a déjà ${plural(S.notes.length,"note","notes")}. Que veux-tu faire ?
-        <div class="btnrow"><button class="btn primary" id="sjMerge" type="button">Tout garder (fusionner)</button><button class="btn ghost" id="sjReplace" type="button">Remplacer par l'autre appareil</button></div></div>`;
-      $("#sjMerge",s).addEventListener("click", () => startSync(code, "merge"));
-      $("#sjReplace",s).addEventListener("click", () => startSync(code, "replace"));
-    });
+    const sn=$("#syncNew",s); if (sn) sn.addEventListener("click", () => startSync(MY_CARNET, "merge"));
     const sg=$("#syncGo",s); if (sg) sg.addEventListener("click", async () => { $("#syncState",s).innerHTML=`<div class="loading"><div class="spinner"></div>Synchro…</div>`; await syncNow(); });
-    const sc=$("#syncCopy",s); if (sc) sc.addEventListener("click", async () => { try{ await navigator.clipboard.writeText(getSyncCode()); toast("Code copié"); }catch{ toast("Code : "+getSyncCode()); } });
     const so=$("#syncOff",s); if (so) so.addEventListener("click", () => { try{ localStorage.removeItem("carnet.sync"); }catch{} SYNC.err=""; SYNC.last=0; openBackup(); render(); toast("Synchro arrêtée sur cet appareil"); });
     const sr=$("#saveRelay",s);
     if (sr) sr.addEventListener("click", async () => {
@@ -1565,7 +1552,7 @@ function openBackup(){
       if (!/^https:\/\/[^\s]+\.workers\.dev\/?$/.test(v)){ rm.innerHTML=`<div class="feedback no">L'adresse doit ressembler à https://carnet-relay.ton-nom.workers.dev</div>`; return; }
       try{ localStorage.setItem("carnet.relay", v); }catch{}
       rm.innerHTML=`<div class="loading"><div class="spinner"></div>Je teste le relais…</div>`;
-      try{ const r=await lookupRelay("bonjour"); rm.innerHTML=`<div class="feedback ok">Ça marche ! Exemple : « ${esc(r.example||r.meaning)} »</div>`; }
+      try{ const r=await lookupRelay("bonjour"); openBackup(); toast("Ça marche ! Le relais est prêt."); }
       catch(e){ rm.innerHTML=`<div class="feedback close">Adresse enregistrée, mais le test a échoué${e.status?` (erreur ${e.status})`:""}. Vérifie la clé GROQ_KEY dans Cloudflare, puis réessaie.</div>`; }
     });
     const dr=$("#delRelay",s);
