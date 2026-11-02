@@ -68,6 +68,8 @@ button{cursor:pointer}
 .bg{position:fixed;inset:0;z-index:0;pointer-events:none;background:linear-gradient(to bottom,var(--sky-top) 0%,var(--sky-low) 55%,var(--bg) 100%)}
 .street{margin-top:auto;width:100vw;margin-left:calc(50% - 50vw);margin-right:calc(50% - 50vw);pointer-events:none;padding-bottom:calc(84px + env(safe-area-inset-bottom,0px));background:linear-gradient(to top,var(--city-near) calc(84px + env(safe-area-inset-bottom,0px)),transparent 0)}
 .street svg{width:100%;height:clamp(300px,58vw,600px);display:block}
+/* safety: always leave room for the bottom bar, even if the street is missing */
+.wrap:not(:has(.street)){padding-bottom:calc(110px + env(safe-area-inset-bottom,0px))!important}
 html,body{overflow-x:clip}
 .bg .moon{position:absolute;right:12%;top:calc(env(safe-area-inset-top,0px) + 70px);width:46px;height:46px;border-radius:50%;background:var(--win);opacity:0;box-shadow:0 0 30px var(--win)}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .bg .moon{opacity:.8}}
@@ -520,7 +522,7 @@ mark{background:color-mix(in srgb,var(--gold) 28%,transparent);color:inherit;bor
 (() => {
 "use strict";
 const OFFLINE = true;
-const APP_VERSION = 52;
+const APP_VERSION = 53;
 const CLAUDE_CARNET = "https://claude.ai/artifact/SkJpyQF39EEnoKqUSY5DPX";
 
 /* ---------- helpers ---------- */
@@ -1124,14 +1126,14 @@ function renderCarnet(){
       ${myCarnetFolders()}`;
   }
   const qi=$("#q"); if (qi){ qi.addEventListener("input", e => { UI.q=e.target.value; render(); }); if (hadFocus){ qi.focus(); qi.setSelectionRange(qi.value.length, qi.value.length); } }
-  app.querySelectorAll("[data-f]").forEach(b => b.addEventListener("click", () => { UI.filter=b.dataset.f; renderCarnet(); }));
-  app.querySelectorAll("[data-fopen]").forEach(b => b.addEventListener("click", () => { UI.open=b.dataset.fopen; UI.filter="all"; renderCarnet(); window.scrollTo(0,0); }));
-  const bf=$("#backFolders"); if (bf) bf.addEventListener("click", () => { UI.open=null; UI.filter="all"; renderCarnet(); window.scrollTo(0,0); });
-  const sc=$("#sortCarnets"); if(sc) sc.addEventListener("click", () => { UI.sorting=true; renderCarnet(); });
-  const sd=$("#sortDone"); if(sd) sd.addEventListener("click", () => { UI.sorting=false; renderCarnet(); toast("Ordre enregistré"); });
+  app.querySelectorAll("[data-f]").forEach(b => b.addEventListener("click", () => { UI.filter=b.dataset.f; render(); }));
+  app.querySelectorAll("[data-fopen]").forEach(b => b.addEventListener("click", () => { UI.open=b.dataset.fopen; UI.filter="all"; render(); window.scrollTo(0,0); }));
+  const bf=$("#backFolders"); if (bf) bf.addEventListener("click", () => { UI.open=null; UI.filter="all"; render(); window.scrollTo(0,0); });
+  const sc=$("#sortCarnets"); if(sc) sc.addEventListener("click", () => { UI.sorting=true; render(); });
+  const sd=$("#sortDone"); if(sd) sd.addEventListener("click", () => { UI.sorting=false; render(); toast("Ordre enregistré"); });
   app.querySelectorAll("[data-mv]").forEach(b => b.addEventListener("click", () => {
     const cs=myCarnets(), i=+b.dataset.mv, j=i+(+b.dataset.d); if(j<0||j>=cs.length) return;
-    [cs[i],cs[j]]=[cs[j],cs[i]]; saveMeta(); renderCarnet();
+    [cs[i],cs[j]]=[cs[j],cs[i]]; saveMeta(); render();
     const again=app.querySelector(`[data-mv="${j}"][data-d="${b.dataset.d}"]`) || app.querySelector(`[data-mv="${j}"]`); if(again) again.focus();
   }));
   ["#newCarnet","#newCarnet2"].forEach(id => { const b=$(id); if(b) b.addEventListener("click", () => openCarnetForm(null)); });
