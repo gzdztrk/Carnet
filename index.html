@@ -522,7 +522,7 @@ mark{background:color-mix(in srgb,var(--gold) 28%,transparent);color:inherit;bor
 (() => {
 "use strict";
 const OFFLINE = true;
-const APP_VERSION = 54;
+const APP_VERSION = 55;
 const CLAUDE_CARNET = "https://claude.ai/artifact/SkJpyQF39EEnoKqUSY5DPX";
 
 /* ---------- helpers ---------- */
@@ -700,6 +700,8 @@ function syncStateHTML(){
   if (SYNC.err) return `<div class="feedback close">Pas de connexion pour l'instant. La synchro reprendra toute seule.</div>`;
   return SYNC.last ? `<div class="feedback ok">Synchronisé à ${new Date(SYNC.last).toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})} ✓</div>` : `<div class="loading"><div class="spinner"></div>Synchro…</div>`;
 }
+// devices that turned on sync with a code (versions 51 to 53) move to the one shared carnet
+if (OFFLINE){ const old=getSyncCode(); if (old && old!==MY_CARNET){ try{ localStorage.setItem("carnet.sync", MY_CARNET); }catch{} lsSet("carnet.syncBase", { notes:{}, carnets:{}, meta:"" }); } }
 if (OFFLINE){
   document.addEventListener("visibilitychange", () => { if (document.visibilityState==="visible") syncNow(); });
   window.addEventListener("online", () => syncNow());
