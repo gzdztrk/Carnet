@@ -279,6 +279,28 @@ body.sparkling .sparkle circle{animation:spark .9s ease-in-out infinite}
 .date-tile .dt-n{font-size:.78rem;color:var(--muted);font-weight:700}
 .date-tile.on{border:2px solid var(--accent);background:var(--card)}
 .date-body{margin-top:12px}
+.carnet-row{margin-top:10px}
+.back-chip{margin-top:14px;background:var(--glass);border:1px solid var(--line);font-weight:700;align-self:flex-start;width:auto}
+.folder-title{display:flex;align-items:center;gap:12px;margin:14px 2px 12px}
+.folder-title h2{font-family:var(--f-display);font-weight:700;font-size:1.45rem;margin:0;line-height:1.2}
+.folder-title .folder-ic{width:50px;height:45px}
+.folder-tools{margin-bottom:4px;flex-wrap:wrap!important}
+.sec-head h2{white-space:nowrap}
+.sec-btns{flex:none}
+@media (max-width:380px){
+  .sort-btn .lbl{display:none}
+  .sec-head h2{font-size:1.05rem}
+}
+@media (max-width:340px){
+  .top h1{font-size:1.75rem}
+  .sec-btns .chip{min-width:44px;justify-content:center}
+  .date-tile{min-height:80px;padding:10px 4px 8px}
+  .date-tile .folder-ic{width:36px;height:32px}
+  .date-tile .dt-name{font-size:.8rem}
+  .folder-head{min-height:52px;padding:6px 12px}
+  .folder-head .folder-ic{width:40px;height:36px}
+  .folder-tools .chip{padding:0 10px;font-size:.82rem}
+}
 .sync-code{font-family:ui-monospace,Menlo,monospace;font-size:1.35rem;font-weight:700;letter-spacing:.08em;text-align:center;padding:12px;border-radius:14px;background:var(--card);border:1px dashed var(--line);user-select:all;-webkit-user-select:all}
 .linkish{background:none;border:0;color:var(--muted);text-decoration:underline;font:inherit;font-size:.9rem;padding:6px 0;align-self:flex-start}
 .sec-btns{display:flex;gap:8px}
@@ -498,7 +520,7 @@ mark{background:color-mix(in srgb,var(--gold) 28%,transparent);color:inherit;bor
 (() => {
 "use strict";
 const OFFLINE = true;
-const APP_VERSION = 51;
+const APP_VERSION = 52;
 const CLAUDE_CARNET = "https://claude.ai/artifact/SkJpyQF39EEnoKqUSY5DPX";
 
 /* ---------- helpers ---------- */
@@ -864,7 +886,7 @@ const app = $("#app");
 document.querySelectorAll(".tab[data-tab]").forEach(b => b.addEventListener("click", () => goTab(b.dataset.tab)));
 $("#addTab").addEventListener("click", () => openEditor());
 document.addEventListener("click", e => { if (e.target.closest && e.target.closest("#backupBtn")) openBackup(); });
-function goTab(t){ if (t!==UI.tab){ UI.q=""; UI.filter="all"; UI.sorting=false; } UI.tab=t; UI.session=null; render(); window.scrollTo(0,0); }
+function goTab(t){ if (t!==UI.tab){ UI.q=""; UI.filter="all"; UI.sorting=false; UI.open=null; } else if (t==="carnet" && UI.open){ UI.open=null; UI.filter="all"; } UI.tab=t; UI.session=null; render(); window.scrollTo(0,0); }
 
 let linkGame = (!OFFLINE && ["ecrire","scene"].includes(location.hash.slice(1))) ? location.hash.slice(1) : null;
 function openFromLink(tries=0){
@@ -1033,8 +1055,15 @@ function openCarnetDelete(c){
       });
     });
 }
-function myCarnetFolders(list){
-  UI.folders=UI.folders||{ week:true };
+const CHEV = `<svg class="folder-chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>`;
+const DATE_TITLES = { week:"Cette semaine", month:"Ce mois-ci", old:"Plus ancien" };
+function dateBucket(n){
+  const now=new Date();
+  const week=new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay()+6)%7)).getTime(); // lundi
+  const month=new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  const t=n.created||0; return t>=week?"week":t>=month?"month":"old";
+}
+function myCarnetFolders(){
   const cs=myCarnets();
   if (cs.length<2) UI.sorting=false;
   if (UI.sorting) return `<div class="sec-head"><h2>Mes carnets</h2><button class="chip new-carnet" id="sortDone">✓ Terminé</button></div>
@@ -1043,71 +1072,61 @@ function myCarnetFolders(list){
       ${notebookIc(c.color)}<span class="folder-name">${esc(c.name)}</span>
       <button class="mv" data-mv="${i}" data-d="-1" aria-label="Monter ${esc(c.name)}" ${i===0?"disabled":""}>▲</button>
       <button class="mv" data-mv="${i}" data-d="1" aria-label="Descendre ${esc(c.name)}" ${i===cs.length-1?"disabled":""}>▼</button>
-    </div>`).join("")}
-`;
-  const items=cs.map(c => {
-    const ns=list.filter(n=>n.carnet===c.id), k="c:"+c.id, open=!!UI.folders[k];
-    return `<section class="folder ${open?"open":""}">
-      <button class="folder-head" data-folder="${k}" aria-expanded="${open}">
-        ${notebookIc(c.color)}<span class="folder-name">${esc(c.name)}</span><span class="folder-n">${ns.length?plural(ns.length,"note","notes"):"vide"}</span>
-        <svg class="folder-chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
-      </button>
-      ${open?`<div class="list folder-body">${ns.map(noteCard).join("") || `<p class="folder-empty">Rien ici pour l'instant. Choisis ce carnet quand tu ajoutes une note.</p>`}
-        <div class="folder-tools"><button class="chip" data-addto="${c.id}">＋ Ajouter ici</button><button class="chip" data-rename="${c.id}">Renommer</button><button class="chip" data-delcarnet="${c.id}">Supprimer</button></div></div>`:""}
-    </section>`; }).join("");
-  return `<div class="sec-head"><h2>Mes carnets</h2><span class="sec-btns">${cs.length>1?`<button class="chip sort-btn" id="sortCarnets">⇅ Ranger</button>`:""}<button class="chip new-carnet" id="newCarnet">＋ Nouveau</button></span></div>
-    ${items || `<button class="folder-new" id="newCarnet2">${notebookIc("#B9A7B1")}<span><strong>Crée ton premier carnet</strong><small>ex. « Lupin, saison 1 », « Leçon 5 », « Au travail »</small></span></button>`}
-`;
+    </div>`).join("")}`;
+  const items=cs.map(c => { const n=S.notes.filter(x=>x.carnet===c.id).length; return `
+    <button class="folder-head carnet-row" data-fopen="c:${c.id}">
+      ${notebookIc(c.color)}<span class="folder-name">${esc(c.name)}</span><span class="folder-n">${n?plural(n,"note","notes"):"vide"}</span>${CHEV}
+    </button>`; }).join("");
+  return `<div class="sec-head"><h2>Mes carnets</h2><span class="sec-btns">${cs.length>1?`<button class="chip sort-btn" id="sortCarnets" aria-label="Ranger les carnets">⇅<span class="lbl"> Ranger</span></button>`:""}<button class="chip new-carnet" id="newCarnet" aria-label="Nouveau carnet">＋<span class="lbl"> Nouveau</span></button></span></div>
+    ${items || `<button class="folder-new" id="newCarnet2">${notebookIc("#B9A7B1")}<span><strong>Crée ton premier carnet</strong><small>ex. « Lupin, saison 1 », « Leçon 5 », « Au travail »</small></span></button>`}`;
 }
-function dateGroups(list){
-  const now=new Date();
-  const week=new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay()+6)%7)).getTime(); // lundi
-  const month=new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-  const groups=[["week","Cette semaine",[]],["month","Ce mois-ci",[]],["old","Plus ancien",[]]];
-  [...list].sort((a,b)=>(b.created||0)-(a.created||0)).forEach(n => {
-    const t=n.created||0; groups[t>=week?0:t>=month?1:2][2].push(n);
-  });
-  const shown=groups;
-  if (!UI.folders) UI.folders={ week:true };
-  const searching=!!UI.q.trim();
-  if (!searching){
-    if (UI.dateOpen===undefined) UI.dateOpen=null;
-    const cur=shown.find(g=>g[0]===UI.dateOpen);
-    return `<div class="date-row">${shown.map(([k,title,ns]) => `
-      <button class="date-tile ${UI.dateOpen===k?"on":""}" data-date="${k}" aria-expanded="${UI.dateOpen===k}">
-        ${FOLDER_IC[k]}<span class="dt-name">${title}</span><span class="dt-n">${ns.length?plural(ns.length,"note","notes"):"vide"}</span>
-      </button>`).join("")}</div>
-      ${cur?`<div class="list date-body">${cur[2].map(noteCard).join("") || `<p class="folder-empty">Rien ici pour l'instant.</p>`}</div>`:""}`;
-  }
-  return shown.map(([k,title,ns]) => { const open=searching || !!UI.folders[k]; return `
-    <section class="folder ${open?"open":""}">
-      <button class="folder-head" data-folder="${k}" aria-expanded="${open}">
-        ${FOLDER_IC[k]}
-        <span class="folder-name">${title}</span><span class="folder-n">${ns.length?plural(ns.length,"note","notes"):"vide"}</span>
-        <svg class="folder-chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
-      </button>
-      ${open?`<div class="list folder-body">${ns.map(noteCard).join("") || `<p class="folder-empty">Rien ici pour l'instant.</p>`}</div>`:""}
-    </section>`; }).join("");
+function dateTiles(){
+  const cnt={ week:0, month:0, old:0 }; S.notes.forEach(n=>cnt[dateBucket(n)]++);
+  return `<div class="sec-head first"><h2>Par date</h2></div>
+    <div class="date-row">${["week","month","old"].map(k => `
+      <button class="date-tile" data-fopen="d:${k}">
+        ${FOLDER_IC[k]}<span class="dt-name">${DATE_TITLES[k]}</span><span class="dt-n">${cnt[k]?plural(cnt[k],"note","notes"):"vide"}</span>
+      </button>`).join("")}</div>`;
 }
+const chipsHTML = base => { const c={ all:base.length, mot:0, expression:0, phrase:0 }; base.forEach(n=>c[n.kind]=(c[n.kind]||0)+1);
+  return `<div class="chips" role="group" aria-label="Filtrer">${[["all","Tout"],["mot","Mots"],["expression","Expressions"],["phrase","Phrases"]].map(([k,l])=>`<button class="chip" data-f="${k}" aria-pressed="${UI.filter===k}">${l}<span class="n">${c[k]||0}</span></button>`).join("")}</div>`; };
 function renderCarnet(){
-  const counts = { all:S.notes.length, mot:0, expression:0, phrase:0 };
-  S.notes.forEach(n => counts[n.kind] = (counts[n.kind]||0)+1);
+  if (UI.open && UI.open.startsWith("c:") && !carnetOf(UI.open.slice(2))) UI.open=null;
   const q = loose(UI.q);
-  const list = S.notes.filter(n => (UI.filter==="all"||n.kind===UI.filter) && (!q || loose([n.french,n.meaning,n.example].join(" ")).includes(q)));
   const hadFocus = document.activeElement && document.activeElement.id==="q";
-  app.innerHTML = `
-    <header class="top"><div><h1>Mon carnet</h1><div class="sub">${plural(S.notes.length,"note","notes")} · ${S.notes.filter(isDue).length} à revoir</div></div>${syncBadge()}</header>
-    <label class="search"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-      <input id="q" type="search" placeholder="Chercher un mot, une expression…" value="${esc(UI.q)}" aria-label="Chercher dans le carnet"></label>
-    <div class="chips" role="group" aria-label="Filtrer">
-      ${[["all","Tout"],["mot","Mots"],["expression","Expressions"],["phrase","Phrases"]].map(([k,l])=>`<button class="chip" data-f="${k}" aria-pressed="${UI.filter===k}">${l}<span class="n">${counts[k]||0}</span></button>`).join("")}
-    </div>
-    ${list.length ? `${q?"":`<div class="sec-head first"><h2>Par date</h2></div>`}${dateGroups(list)}` : (q || UI.filter!=="all") && S.notes.length ? `<div class="list">${emptyState()}</div>` : `${S.notes.length?"":`<div class="list">${emptyState()}</div>`}<div class="sec-head first"><h2>Par date</h2></div>${dateGroups([])}`}
-    ${!q ? myCarnetFolders(list) : ""}`;
-  const qi=$("#q"); qi.addEventListener("input", e => { UI.q=e.target.value; render(); });
-  if (hadFocus){ qi.focus(); qi.setSelectionRange(qi.value.length, qi.value.length); }
+  const top = `<header class="top"><div><h1>Mon carnet</h1><div class="sub">${plural(S.notes.length,"note","notes")} · ${S.notes.filter(isDue).length} à revoir</div></div>${syncBadge()}</header>`;
+  const byKind = base => base.filter(n => UI.filter==="all" || n.kind===UI.filter);
+  if (UI.open){
+    // one folder on its own page
+    const isC = UI.open.startsWith("c:"), key=UI.open.slice(2), c = isC ? carnetOf(key) : null;
+    const base = isC ? S.notes.filter(n=>n.carnet===key) : S.notes.filter(n=>dateBucket(n)===key);
+    const list = byKind(base);
+    app.innerHTML = `${top}
+      <button class="chip back-chip" id="backFolders">‹ Mon carnet</button>
+      <div class="folder-title">${isC ? notebookIc(c.color) : FOLDER_IC[key]}<h2>${esc(isC ? c.name : DATE_TITLES[key])}</h2></div>
+      ${isC ? `<div class="folder-tools"><button class="chip" data-addto="${c.id}">＋ Ajouter ici</button><button class="chip" data-rename="${c.id}">Renommer</button><button class="chip" data-delcarnet="${c.id}">Supprimer</button></div>` : ""}
+      ${base.length ? chipsHTML(base) : ""}
+      <div class="list" style="margin-top:12px">${list.map(noteCard).join("") || `<p class="folder-empty">${base.length ? "Rien de ce type ici." : isC ? "Rien ici pour l'instant. Touche « ＋ Ajouter ici », ou choisis ce carnet quand tu ajoutes une note." : "Rien ici pour l'instant."}</p>`}</div>`;
+  } else if (q){
+    const list = byKind(S.notes.filter(n => loose([n.french,n.meaning,n.example].join(" ")).includes(q)));
+    app.innerHTML = `${top}
+      <label class="search"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="q" type="search" placeholder="Chercher un mot, une expression…" value="${esc(UI.q)}" aria-label="Chercher dans le carnet"></label>
+      ${chipsHTML(S.notes.filter(n => loose([n.french,n.meaning,n.example].join(" ")).includes(q)))}
+      <div class="list" style="margin-top:12px">${list.map(noteCard).join("") || emptyState()}</div>`;
+  } else {
+    // overview: short, nothing expands here
+    app.innerHTML = `${top}
+      <label class="search"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="q" type="search" placeholder="Chercher un mot, une expression…" value="${esc(UI.q)}" aria-label="Chercher dans le carnet"></label>
+      ${S.notes.length ? "" : `<div class="list" style="margin-top:14px">${emptyState()}</div>`}
+      ${dateTiles()}
+      ${myCarnetFolders()}`;
+  }
+  const qi=$("#q"); if (qi){ qi.addEventListener("input", e => { UI.q=e.target.value; render(); }); if (hadFocus){ qi.focus(); qi.setSelectionRange(qi.value.length, qi.value.length); } }
   app.querySelectorAll("[data-f]").forEach(b => b.addEventListener("click", () => { UI.filter=b.dataset.f; renderCarnet(); }));
-  app.querySelectorAll("[data-folder]").forEach(b => b.addEventListener("click", () => { if (UI.q.trim()) return; const k=b.dataset.folder; UI.folders[k]=!UI.folders[k]; renderCarnet(); }));
+  app.querySelectorAll("[data-fopen]").forEach(b => b.addEventListener("click", () => { UI.open=b.dataset.fopen; UI.filter="all"; renderCarnet(); window.scrollTo(0,0); }));
+  const bf=$("#backFolders"); if (bf) bf.addEventListener("click", () => { UI.open=null; UI.filter="all"; renderCarnet(); window.scrollTo(0,0); });
   const sc=$("#sortCarnets"); if(sc) sc.addEventListener("click", () => { UI.sorting=true; renderCarnet(); });
   const sd=$("#sortDone"); if(sd) sd.addEventListener("click", () => { UI.sorting=false; renderCarnet(); toast("Ordre enregistré"); });
   app.querySelectorAll("[data-mv]").forEach(b => b.addEventListener("click", () => {
@@ -1115,7 +1134,6 @@ function renderCarnet(){
     [cs[i],cs[j]]=[cs[j],cs[i]]; saveMeta(); renderCarnet();
     const again=app.querySelector(`[data-mv="${j}"][data-d="${b.dataset.d}"]`) || app.querySelector(`[data-mv="${j}"]`); if(again) again.focus();
   }));
-  app.querySelectorAll("[data-date]").forEach(b => b.addEventListener("click", () => { UI.dateOpen = UI.dateOpen===b.dataset.date ? null : b.dataset.date; renderCarnet(); }));
   ["#newCarnet","#newCarnet2"].forEach(id => { const b=$(id); if(b) b.addEventListener("click", () => openCarnetForm(null)); });
   app.querySelectorAll("[data-rename]").forEach(b => b.addEventListener("click", () => openCarnetForm(carnetOf(b.dataset.rename))));
   app.querySelectorAll("[data-delcarnet]").forEach(b => b.addEventListener("click", () => openCarnetDelete(carnetOf(b.dataset.delcarnet))));
